@@ -99,6 +99,7 @@ int tfs_open(char const *name, int flags) {
 int tfs_close(int fhandle) { return remove_from_open_file_table(fhandle); }
 
 ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
+    size_t no_blocks = to_write / BLOCK_SIZE + 1; 
     open_file_entry_t *file = get_open_file_entry(fhandle);
     if (file == NULL) {
         return -1;
@@ -118,8 +119,18 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
     if (to_write > 0) {
         if (inode->i_size == 0) {
             /* If empty file, allocate new block */
-            inode->i_data_block = data_block_alloc();
-        }
+	        for (int i = 0; i < 10; i++) {
+                inode->i_data_block[i] = data_block_alloc();
+            }
+	        if (no_blocks > 10) {
+		        inode->i_indirect_data_block = data_block_alloc();
+                // TODO - data_block_get() e alocar <cenas>
+                for (int j = 10; j < no_blocks; j++) {
+                    void *indirect_block = data_block_get(j);
+                    indirect_block->data_block_alloc();
+                }
+            }
+	    }
 
         void *block = data_block_get(inode->i_data_block);
         if (block == NULL) {
@@ -159,10 +170,6 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
         to_read = len;
     }
 
-    if (file->of_offset + to_read >= BLOCK_SIZE) {
-        return -1;
-    }
-
     if (to_read > 0) {
         void *block = data_block_get(inode->i_data_block);
         if (block == NULL) {
@@ -177,4 +184,10 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
     }
 
     return (ssize_t)to_read;
+}
+
+int tfs_copy_to_external_fs(char const *source_path, char const *dest_path) {
+    // TODO - cenas
+
+    return 0;
 }
