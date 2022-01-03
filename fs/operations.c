@@ -1,8 +1,10 @@
 #include "operations.h"
+#include <fcntl.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 int tfs_init() {
     state_init();
@@ -187,24 +189,29 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
 }
 
 int tfs_copy_to_external_fs(char const *source_path, char const *dest_path) {
-    // TODO - cenas
-    //procurar o dest_path: se existir subsitituir tudo, se não criar e meter tudo lá para dentro
-    int i, scr, dest;
-    scr = tfs_open(source_path, TFS_O_TRUNC); //Flag certa?
-    i = tfs_lookup(dest_path); // i = 0 se existir, i = -1 caso contrário
-    if (i == -1){
-        //não existe -> criar o ficheiro
-        dest = tfs_open(dest_path, TFS_O_CREAT); //criar
+    int src_fd = tfs_open(source_path, 0); // ok nvm nao precisa de flags
+    if (src_fd == -1) {
+        return -1; // verificar se deu erro - completar isto com uma mensagem ig
     }
-    else{
-        //existe -> apagar tudo para ficar limpo e copiar depois tudo ca para dentro
-        dest = tfs_open(dest_path, TFS_O_APPEND); //Flag certa?
-        //apagar o content
+
+    int dest_fd = open(dest_path, O_TRUNC | O_WRONLY);
+    if (dest_fd == -1) {
+        return -1; // verificar se deu erro - completar isto com uma mensagem ig
     }
-    tfs_read(src, /*? BUFFER*/, /*?nem aqui*/);
-    tfs_write(dest, /*BUFFER de cima?*/, /*???*/);
-    tfs_close(src);
-    tfs_close(dest);
+    
+    // TODO - fazer um loop com este mambo, ir pondo em blocos ig
+    // inicio do loop
+    ssize_t bytes_read = tfs_read(src_fd, /*? BUFFER*/, /*?nem aqui*/);
+    if (bytes_read < 0) {
+        return -1; // something went wrong - completar isto com uma mensagem
+    }
+    //tfs_write(dest_fd, /*BUFFER de cima?*/, /*???*/); acho que aqui devia ser write normal (vê abaixo)
+    write(dest_fd, /*BUFFER de cima?*/, /*???*/);
+    // fim do loop
+    // pelo meio do loop aconteciam cenas tipo verificar as bounds do bloco e etc
+
+    tfs_close(src_fd);
+    close(dest_fd);
 
     return 0; //SUCCESS
 }
