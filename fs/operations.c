@@ -188,6 +188,23 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
 
 int tfs_copy_to_external_fs(char const *source_path, char const *dest_path) {
     // TODO - cenas
+    //procurar o dest_path: se existir subsitituir tudo, se não criar e meter tudo lá para dentro
+    int i, scr, dest;
+    scr = tfs_open(source_path, TFS_O_TRUNC); //Flag certa?
+    i = tfs_lookup(dest_path); // i = 0 se existir, i = -1 caso contrário
+    if (i == -1){
+        //não existe -> criar o ficheiro
+        dest = tfs_open(dest_path, TFS_O_CREAT); //criar
+    }
+    else{
+        //existe -> apagar tudo para ficar limpo e copiar depois tudo ca para dentro
+        dest = tfs_open(dest_path, TFS_O_APPEND); //Flag certa?
+        //apagar o content
+    }
+    tfs_read(src, /*? BUFFER*/, /*?nem aqui*/);
+    tfs_write(dest, /*BUFFER de cima?*/, /*???*/);
+    tfs_close(src);
+    tfs_close(dest);
 
-    return 0;
+    return 0; //SUCCESS
 }
