@@ -190,7 +190,7 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
 
 // TODO -  fazer isto thread-safe, ver https://piazza.com/class/kwp87w2smmq66p?cid=84
 int tfs_copy_to_external_fs(char const *source_path, char const *dest_path) {
-    int src_fd = tfs_open(source_path, 0); // ok nvm nao precisa de flags
+    int src_fd = tfs_open(source_path, TFS_O_CREAT); // não precisa de flags especificas, so nao pode é ser a TRUNC
     if (src_fd == -1) {
         return -1; // verificar se deu erro - completar isto com uma mensagem ig
     }
