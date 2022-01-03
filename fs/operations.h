@@ -80,7 +80,7 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len);
 
 /* Copies the contents of a file that exists in TecnicoFS to the contents
  * of another file in the OS' file system tree (outside TecnicoFS).
- * Devolve 0 em caso de sucesso, -1 em caso de erro.
+ * 0 ->> Success, -1 ->> Error.
  * * Input:
  *      - path name of the source file (from TecnicoFS)
  *      - path name of the destination file (in the main file system), which 
