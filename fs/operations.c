@@ -212,14 +212,18 @@ int tfs_copy_to_external_fs(char const *source_path, char const *dest_path) {
 
     char *buffer;
     // abaixo - não tenho a certeza se é BLOCK_SIZE * source_size ou source_size, temos de testar
-    buffer = (char *) malloc(sizeof(char) * BLOCK_SIZE * source_size);
-    size_t bytes_read = tfs_read(source_handle, buffer, BLOCK_SIZE * source_size);
+    buffer = (char *) malloc(sizeof(char) * source_size);
+    size_t bytes_read = tfs_read(source_handle, buffer, source_size);
     
     if (bytes_read == -1) {
         return -1;
     }
 
-    fwrite(buffer, sizeof(char), bytes_read, dest_file);
+    // perhaps writing and reading in blocks is better (aka less oportunity of failing)
+    // see https://stackoverflow.com/questions/11054750/check-return-value-fread-and-fwrite
+    if (fwrite(buffer, sizeof(char), bytes_read, dest_file) != bytes_read) {
+        return -1;
+    }
 
     tfs_close(source_handle);
     fclose(dest_file);
