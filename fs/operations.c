@@ -190,29 +190,42 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
 
 // TODO -  fazer isto thread-safe, ver https://piazza.com/class/kwp87w2smmq66p?cid=84
 int tfs_copy_to_external_fs(char const *source_path, char const *dest_path) {
-    int src_fd = tfs_open(source_path, TFS_O_CREAT); // não precisa de flags especificas, so nao pode é ser a TRUNC
-    if (src_fd == -1) {
-        return -1; // verificar se deu erro - completar isto com uma mensagem ig
+    int src_handle = tfs_open(source_path, TFS_O_CREAT); // não precisa de flags especificas, so nao pode é ser a TRUNC
+    if (src_handle == -1) {
+        return -1;
     }
 
-    int dest_fd = open(dest_path, O_TRUNC | O_WRONLY);
-    if (dest_fd == -1) {
-        return -1; // verificar se deu erro - completar isto com uma mensagem ig
+    open_file_entry_t *src_file = get_open_file_entry(src_handle);
+    if (src_file == NULL) {
+        return -1;
     }
+
+    inode_t *src_inode = inode_get(src_file->of_inumber);
+    if (src_inode == NULL) {
+        return -1;
+    }
+
+    size_t src_size = src_inode->i_size;
+
+    FILE *dest_file = fopen(dest_path, "w");
+    if (dest_file == NULL) {
+        return -1;
+    }
+
+    char *buffer;
+    // abaixo - não tenho a certeza se é BLOCK_SIZE * src_size ou src_size, temos de testar
+    buffer = (char *) malloc(sizeof(char) * BLOCK_SIZE * src_size);
+    size_t bytes_read = tfs_read(src_handle, buffer, BLOCK_SIZE * src_size);
     
-    // TODO - fazer um loop com este mambo, ir pondo em blocos ig
-    // inicio do loop
-    ssize_t bytes_read = tfs_read(src_fd, /*? BUFFER*/, /*?nem aqui*/);
-    if (bytes_read < 0) {
-        return -1; // something went wrong - completar isto com uma mensagem
+    if (bytes_read == -1) {
+        return -1;
     }
-    //tfs_write(dest_fd, /*BUFFER de cima?*/, /*???*/); acho que aqui devia ser write normal (vê abaixo)
-    write(dest_fd, /*BUFFER de cima?*/, /*???*/);
-    // fim do loop
-    // pelo meio do loop aconteciam cenas tipo verificar as bounds do bloco e etc
 
-    tfs_close(src_fd);
-    close(dest_fd);
+    fwrite(buffer, sizeof(char), bytes_read, dest_file);
 
-    return 0; //SUCCESS
+    tfs_close(src_handle);
+    fclose(dest_file);
+    free(buffer);
+
+    return 0;
 }
