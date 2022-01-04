@@ -59,4 +59,6 @@ int add_to_open_file_table(int inumber, size_t offset);
 int remove_from_open_file_table(int fhandle);
 open_file_entry_t *get_open_file_entry(int fhandle);
 
+int allocate_empty_file(inode_t *inode, size_t direct_blocks, size_t total_blocks);
+
 #endif // STATE_H

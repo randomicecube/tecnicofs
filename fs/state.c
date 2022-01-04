@@ -337,3 +337,33 @@ open_file_entry_t *get_open_file_entry(int fhandle) {
     }
     return &open_file_table[fhandle];
 }
+
+/*
+ * Called if, in tfs_write, it's intended to write in an empty file.
+ * Here, the required data blocks for a given inode are allocated.
+ * Inputs:
+ *     - inumber of the file
+ *     - number of direct blocks to allocate
+ *     - number of total blocks to allocate (direct + indirect)
+ * Returns: 0 if successful, -1 otherwise
+*/
+int allocate_empty_file(inode_t *inode, size_t direct_blocks, size_t total_blocks) {
+    for (int i = 0; i < direct_blocks; i++) {
+        inode->i_data_block[i] = data_block_alloc();
+        if (inode->i_data_block[i] == -1) {
+            return -1;
+        }
+    }
+	if (total_blocks > 10) {
+	    inode->i_indirect_data_block = data_block_alloc();
+        int *indirect_block = (int *) data_block_get(inode->i_indirect_data_block);
+        for (int j = 10; j < total_blocks; j++) {
+            int block_index = data_block_alloc();
+            if (block_index == -1) {
+                return -1;
+            }
+            indirect_block[j-10] = block_index;
+        }
+    }
+    return 0;
+}
