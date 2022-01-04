@@ -124,10 +124,10 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
             }
 	        if (no_blocks > 10) {
 		        inode->i_indirect_data_block = data_block_alloc();
-                // TODO - data_block_get() e alocar <cenas>
+                (int*) indirect_block = data_block_get(i_indirect_data_block);
                 for (int j = 10; j < no_blocks; j++) {
-                    void *indirect_block = data_block_get(j);
-                    indirect_block->data_block_alloc();
+                    int block = data_block_alloc();
+                    indirect_block[j-10] = block;
                 }
             }
 	    }
