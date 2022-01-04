@@ -1,10 +1,8 @@
 #include "operations.h"
-#include <fcntl.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
 int tfs_init() {
     state_init();
@@ -190,22 +188,22 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
 
 // TODO -  fazer isto thread-safe, ver https://piazza.com/class/kwp87w2smmq66p?cid=84
 int tfs_copy_to_external_fs(char const *source_path, char const *dest_path) {
-    int src_handle = tfs_open(source_path, TFS_O_CREAT); // não precisa de flags especificas, so nao pode é ser a TRUNC
-    if (src_handle == -1) {
+    int source_handle = tfs_open(source_path, TFS_O_CREAT); // não precisa de flags especificas, so nao pode é ser a TRUNC
+    if (source_handle == -1) {
         return -1;
     }
 
-    open_file_entry_t *src_file = get_open_file_entry(src_handle);
-    if (src_file == NULL) {
+    open_file_entry_t *source_file = get_open_file_entry(source_handle);
+    if (source_file == NULL) {
         return -1;
     }
 
-    inode_t *src_inode = inode_get(src_file->of_inumber);
-    if (src_inode == NULL) {
+    inode_t *source_inode = inode_get(source_file->of_inumber);
+    if (source_inode == NULL) {
         return -1;
     }
 
-    size_t src_size = src_inode->i_size;
+    size_t source_size = source_inode->i_size;
 
     FILE *dest_file = fopen(dest_path, "w");
     if (dest_file == NULL) {
@@ -213,9 +211,9 @@ int tfs_copy_to_external_fs(char const *source_path, char const *dest_path) {
     }
 
     char *buffer;
-    // abaixo - não tenho a certeza se é BLOCK_SIZE * src_size ou src_size, temos de testar
-    buffer = (char *) malloc(sizeof(char) * BLOCK_SIZE * src_size);
-    size_t bytes_read = tfs_read(src_handle, buffer, BLOCK_SIZE * src_size);
+    // abaixo - não tenho a certeza se é BLOCK_SIZE * source_size ou source_size, temos de testar
+    buffer = (char *) malloc(sizeof(char) * BLOCK_SIZE * source_size);
+    size_t bytes_read = tfs_read(source_handle, buffer, BLOCK_SIZE * source_size);
     
     if (bytes_read == -1) {
         return -1;
@@ -223,7 +221,7 @@ int tfs_copy_to_external_fs(char const *source_path, char const *dest_path) {
 
     fwrite(buffer, sizeof(char), bytes_read, dest_file);
 
-    tfs_close(src_handle);
+    tfs_close(source_handle);
     fclose(dest_file);
     free(buffer);
 
