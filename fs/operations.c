@@ -158,17 +158,17 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
                 inode->i_size = file->of_offset;
             }
         }
-            if (no_blocks > 10){
-                int *ind_block = (int*)data_block_get(inode->i_indirect_data_block);
-                for(int j = 10; j < no_blocks; j++){
-                    void *indirectblock_ = data_block_get(ind_block[j]);
-                    memcpy(indirectblock_ + file->of_offset, buffer, to_write);
-                    file->of_offset += to_write;
-                    if (file->of_offset > inode->i_size) {
-                        inode->i_size = file->of_offset;
-                    }
+        if (no_blocks > 10){
+            int *ind_block = (int *) data_block_get(inode->i_indirect_data_block);
+            for (int j = 10; j < no_blocks; j++) {
+                void *indirectblock_ = data_block_get(ind_block[j]);
+                memcpy(indirectblock_ + file->of_offset, buffer, to_write);
+                file->of_offset += to_write;
+                if (file->of_offset > inode->i_size) {
+                    inode->i_size = file->of_offset;
                 }
             }
+        }
     }
 
     return (ssize_t)to_write;
