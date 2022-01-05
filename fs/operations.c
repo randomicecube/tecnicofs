@@ -57,7 +57,13 @@ int tfs_open(char const *name, int flags) {
         /* Trucate (if requested) */
         if (flags & TFS_O_TRUNC) {
             if (inode->i_size > 0) {
-                if (data_block_free(inode->i_data_block) == -1) {
+                for (int i = 0; i < MAX_DIRECT_BLOCKS; i++) {
+                    if (data_block_free(inode->i_data_block[i]) == -1) {
+                        return -1;
+                    }
+                }
+                // TODO - free indirect blocks thorougly
+                if (data_block_free(inode->i_indirect_data_block) == -1) {
                     return -1;
                 }
                 inode->i_size = 0;
@@ -110,7 +116,7 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
         return -1;
     }
 
-    ssize_t bytes_written = 0;
+    size_t bytes_written = 0;
 
     if (to_write > 0) {
         size_t previously_written_blocks = file->of_offset / BLOCK_SIZE + 1; //is it offset or isize?
@@ -118,10 +124,10 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
         size_t current_write_size = BLOCK_SIZE;
         size_t needed_blocks = to_write / BLOCK_SIZE + 1;
 
-        for (int i = previously_written_blocks; i < end_write_blocks; i++, to_write -= BLOCK_SIZE) {
+        for (size_t i = previously_written_blocks; i < end_write_blocks; i++, to_write -= BLOCK_SIZE) {
             current_write_size = (to_write > BLOCK_SIZE ? BLOCK_SIZE : to_write);
             void *block;
-            if (i < 10) {
+            if (i < MAX_DIRECT_BLOCKS) {
                 if (inode->i_data_block[i] == -1) {
                     inode->i_data_block[i] = data_block_alloc();
                 }
@@ -136,8 +142,8 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
                     if (indirect_block == NULL) {
                         return -1;
                     }
-                    for (int j = 10; j < needed_blocks; j++) {
-                        indirect_block[j-10] = -1; // they start at -1, allocated if needed
+                    for (int j = MAX_DIRECT_BLOCKS; j < needed_blocks; j++) {
+                        indirect_block[j-MAX_DIRECT_BLOCKS] = -1; // they start at -1, allocated if needed
                     }
                 }
 
@@ -146,10 +152,10 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
                     return -1;
                 }
 
-                if (indirect_block[i-10] == -1) {
-                    indirect_block[i-10] = data_block_alloc();
+                if (indirect_block[i-MAX_DIRECT_BLOCKS] == -1) {
+                    indirect_block[i-MAX_DIRECT_BLOCKS] = data_block_alloc();
                 }
-                block = data_block_get(indirect_block[i-10]);
+                block = data_block_get(indirect_block[i-MAX_DIRECT_BLOCKS]);
                 if (block == NULL) {
                     return -1;
                 }
@@ -163,7 +169,7 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
         }
     }
 
-    return bytes_written;
+    return (ssize_t) bytes_written;
 }
 
 ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
@@ -188,16 +194,16 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
         return 0;
     }
 
-    ssize_t bytes_read = 0;
+    size_t bytes_read = 0;
 
     size_t previously_read_blocks = file->of_offset / BLOCK_SIZE + 1; //is it offset or isize?
     size_t end_read_blocks = (file->of_offset + to_read) / BLOCK_SIZE + 1;
     size_t current_read_size = BLOCK_SIZE;
 
-    for (int i = previously_read_blocks; i < end_read_blocks; i++, to_read -= BLOCK_SIZE) {
+    for (size_t i = previously_read_blocks; i < end_read_blocks; i++, to_read -= BLOCK_SIZE) {
         current_read_size = (to_read > BLOCK_SIZE) ? BLOCK_SIZE : to_read;
         void *block;
-        if (i < 10) {
+        if (i < MAX_DIRECT_BLOCKS) {
             block = data_block_get(inode->i_data_block[i]);
             if (block == NULL) {
                 return -1;
@@ -207,7 +213,7 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
             if (indirect_block == NULL) {
                 return -1;
             }
-            block = data_block_get(indirect_block[i-10]);
+            block = data_block_get(indirect_block[i-MAX_DIRECT_BLOCKS]);
             if (block == NULL) {
                 return -1;
             }
@@ -217,7 +223,7 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
         file->of_offset += current_read_size;
     }
 
-    return bytes_read;
+    return (ssize_t) bytes_read;
 }
 
 // TODO -  fazer isto thread-safe, ver https://piazza.com/class/kwp87w2smmq66p?cid=84
@@ -237,28 +243,33 @@ int tfs_copy_to_external_fs(char const *source_path, char const *dest_path) {
         return -1;
     }
 
-    size_t source_size = source_inode->i_size;
-
     FILE *dest_file = fopen(dest_path, "w");
     if (dest_file == NULL) {
         return -1;
     }
 
-    void *buffer;
-    // TODO - abaixo - não tenho a certeza se é BLOCK_SIZE * source_size ou source_size, temos de testar
-    memset(buffer, 0, BLOCK_SIZE * source_size);
-    size_t bytes_read = tfs_read(source_handle, buffer, source_size * BLOCK_SIZE);
+    void *buffer = malloc(BLOCK_SIZE);
+    if (buffer == NULL) {
+        return -1;
+    }
+    ssize_t bytes_read;
     
-    if (bytes_read == -1) {
-        return -1;
-    }
+    do {
+        memset(buffer, 0, BLOCK_SIZE);
+        bytes_read = tfs_read(source_handle, buffer, BLOCK_SIZE);
+        if (bytes_read == -1) {
+            free(buffer);
+            return -1;
+        }
+        size_t bytes_to_be_written = (size_t) bytes_read;
+        size_t bytes_written = fwrite(buffer, 1, bytes_to_be_written, dest_file);
+        if (bytes_written != bytes_to_be_written) {
+            free(buffer);
+            return -1;
+        }
+    } while (bytes_read == BLOCK_SIZE); // stops when it reads less than BLOCK_SIZE (we have, then, read the final block)
 
-    // perhaps writing and reading in blocks is better (aka less oportunity of failing)
-    // see https://stackoverflow.com/questions/11054750/check-return-value-fread-and-fwrite
-    if (fwrite(buffer, sizeof(char), bytes_read, dest_file) != bytes_read) {
-        return -1;
-    }
-
+    free(buffer);
     if (tfs_close(source_handle) == -1) {
         return -1;
     }
