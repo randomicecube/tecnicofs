@@ -111,7 +111,8 @@ int inode_create(inode_type n_type) {
                 }
 
                 inode_table[inumber].i_size = BLOCK_SIZE;
-                inode_table[inumber].i_data_block = b;
+                inode_table[inumber].i_data_block[0] = b;
+                inode_table[inumber].i_indirect_data_block = -1;
 
                 dir_entry_t *dir_entry = (dir_entry_t *)data_block_get(b);
                 if (dir_entry == NULL) {
@@ -125,7 +126,8 @@ int inode_create(inode_type n_type) {
             } else {
                 /* In case of a new file, simply sets its size to 0 */
                 inode_table[inumber].i_size = 0;
-                inode_table[inumber].i_data_block = -1;
+                inode_table[inumber].i_data_block[0] = -1;
+                inode_table[inumber].i_indirect_data_block = -1;
             }
             return inumber;
         }
@@ -151,8 +153,10 @@ int inode_delete(int inumber) {
     freeinode_ts[inumber] = FREE;
 
     if (inode_table[inumber].i_size > 0) {
-        if (data_block_free(inode_table[inumber].i_data_block) == -1) {
-            return -1;
+        for (int i = 0; i < 10; i++) {
+            if (data_block_free(inode_table[inumber].i_data_block[i]) == -1) {
+                return -1;
+            }
         }
     }
 
@@ -198,7 +202,7 @@ int add_dir_entry(int inumber, int sub_inumber, char const *sub_name) {
 
     /* Locates the block containing the directory's entries */
     dir_entry_t *dir_entry =
-        (dir_entry_t *)data_block_get(inode_table[inumber].i_data_block);
+        (dir_entry_t *)data_block_get(inode_table[inumber].i_data_block[0]);
     if (dir_entry == NULL) {
         return -1;
     }
@@ -231,7 +235,7 @@ int find_in_dir(int inumber, char const *sub_name) {
 
     /* Locates the block containing the directory's entries */
     dir_entry_t *dir_entry =
-        (dir_entry_t *)data_block_get(inode_table[inumber].i_data_block);
+        (dir_entry_t *)data_block_get(inode_table[inumber].i_data_block[0]);
     if (dir_entry == NULL) {
         return -1;
     }
@@ -336,34 +340,4 @@ open_file_entry_t *get_open_file_entry(int fhandle) {
         return NULL;
     }
     return &open_file_table[fhandle];
-}
-
-/*
- * Called if, in tfs_write, it's intended to write in an empty file.
- * Here, the required data blocks for a given inode are allocated.
- * Inputs:
- *     - inumber of the file
- *     - number of direct blocks to allocate
- *     - number of total blocks to allocate (direct + indirect)
- * Returns: 0 if successful, -1 otherwise
-*/
-int allocate_empty_file(inode_t *inode, size_t direct_blocks, size_t total_blocks) {
-    for (int i = 0; i < direct_blocks; i++) {
-        inode->i_data_block[i] = data_block_alloc();
-        if (inode->i_data_block[i] == -1) {
-            return -1;
-        }
-    }
-	if (total_blocks > 10) {
-	    inode->i_indirect_data_block = data_block_alloc();
-        int *indirect_block = (int *) data_block_get(inode->i_indirect_data_block);
-        for (int j = 10; j < total_blocks; j++) {
-            int block_index = data_block_alloc();
-            if (block_index == -1) {
-                return -1;
-            }
-            indirect_block[j-10] = block_index;
-        }
-    }
-    return 0;
 }
