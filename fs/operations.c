@@ -50,29 +50,38 @@ int tfs_open(char const *name, int flags) {
     inum = tfs_lookup(name);
     if (inum >= 0) {
         /* The file already exists */
+        // TODO - MAYBE LOCK HERE
         inode_t *inode = inode_get(inum);
         if (inode == NULL) {
+            // TODO - MAYBE UNLOCK HERE
             return -1;
         }
+        // TODO - MAYBE UNLOCK HERE
 
         /* Trucate (if requested) */
         if (flags & TFS_O_TRUNC) {
+            // TODO - MAYBE LOCK HERE
             if (inode->i_size > 0) {
                 for (int i = 0; i < MAX_DIRECT_BLOCKS; i++) {
                     if (data_block_free(inode->i_data_block[i]) == -1) {
+                        // TODO - MAYBE UNLOCK HERE
                         return -1;
                     }
                 }
                 // TODO - free indirect blocks thorougly
                 if (data_block_free(inode->i_indirect_data_block) == -1) {
+                    // TODO - MAYBE UNLOCK HERE
                     return -1;
                 }
                 inode->i_size = 0;
             }
+            // TODO - MAYBE UNLOCK HERE
         }
         /* Determine initial offset */
         if (flags & TFS_O_APPEND) {
+            // TODO - MAYBE (?????????????) LOCK HERE
             offset = inode->i_size;
+            // TODO - MAYBE UNLOCK HERE
         } else {
             offset = 0;
         }
@@ -124,10 +133,8 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
         size_t previously_written_blocks = file->of_offset / BLOCK_SIZE; //is it offset or isize?
         size_t end_write_blocks = (file->of_offset + to_write) / BLOCK_SIZE;    
         size_t current_write_size = BLOCK_SIZE;
-        size_t needed_blocks = to_write / BLOCK_SIZE;
         if (to_write % BLOCK_SIZE > 0) {
             end_write_blocks++;
-            needed_blocks++;
         }
 
 
@@ -170,7 +177,7 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
                     return -1;
                 }
             }
-            memcpy(block, buffer + file->of_offset, current_write_size);
+            memcpy(block + file->of_offset % BLOCK_SIZE, buffer + file->of_offset, current_write_size);
             bytes_written += current_write_size;
             file->of_offset += current_write_size;
             if (file->of_offset > inode->i_size) {
@@ -207,8 +214,12 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
     size_t bytes_read = 0;
 
     size_t previously_read_blocks = file->of_offset / BLOCK_SIZE; //is it offset or isize?
-    size_t end_read_blocks = (file->of_offset + to_read) / BLOCK_SIZE + 1;
+    size_t end_read_blocks = (file->of_offset + to_read) / BLOCK_SIZE;
     size_t current_read_size = BLOCK_SIZE;
+    size_t buffer_offset = 0;
+    if (to_read % BLOCK_SIZE > 0) {
+        end_read_blocks++;
+    }
 
     for (size_t i = previously_read_blocks; i < end_read_blocks; i++, to_read -= BLOCK_SIZE) {
         current_read_size = (to_read > BLOCK_SIZE) ? BLOCK_SIZE : to_read;
@@ -228,9 +239,10 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
                 return -1;
             }
         }
-        memcpy(buffer + file->of_offset, block, current_read_size);
+        memcpy(buffer + buffer_offset, block + file->of_offset % BLOCK_SIZE, current_read_size);
         bytes_read += current_read_size;
         file->of_offset += current_read_size;
+        buffer_offset += current_read_size;
     }
 
     return (ssize_t) bytes_read;
@@ -257,13 +269,13 @@ int tfs_copy_to_external_fs(char const *source_path, char const *dest_path) {
     if (dest_file == NULL) {
         return -1;
     }
-
-    void *buffer = malloc(BLOCK_SIZE);
+    ssize_t bytes_read;
+    void *buffer;
+    buffer = malloc(BLOCK_SIZE);
     if (buffer == NULL) {
         return -1;
     }
-    ssize_t bytes_read;
-    
+
     do {
         memset(buffer, 0, BLOCK_SIZE);
         bytes_read = tfs_read(source_handle, buffer, BLOCK_SIZE);
@@ -280,6 +292,7 @@ int tfs_copy_to_external_fs(char const *source_path, char const *dest_path) {
     } while (bytes_read == BLOCK_SIZE); // stops when it reads less than BLOCK_SIZE (we have, then, read the final block)
 
     free(buffer);
+
     if (tfs_close(source_handle) == -1) {
         return -1;
     }
