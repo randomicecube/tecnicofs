@@ -95,9 +95,11 @@ int inode_create(inode_type n_type) {
         }
 
         /* Finds first free entry in i-node table */
+        // TODO - LOCK HERE
         if (freeinode_ts[inumber] == FREE) {
             /* Found a free entry, so takes it for the new i-node*/
             freeinode_ts[inumber] = TAKEN;
+            // TODO - UNLOCK HERE
             insert_delay(); // simulate storage access delay (to i-node)
             inode_table[inumber].i_node_type = n_type;
 
@@ -114,7 +116,9 @@ int inode_create(inode_type n_type) {
                 inode_table[inumber].i_data_block[0] = b;
                 inode_table[inumber].i_indirect_data_block = -1;
 
+                // TODO - MAYBE LOCK HERE?
                 dir_entry_t *dir_entry = (dir_entry_t *)data_block_get(b);
+                // TODO - MAYBE UNLOCK HERE?
                 if (dir_entry == NULL) {
                     freeinode_ts[inumber] = FREE;
                     return -1;
@@ -125,7 +129,9 @@ int inode_create(inode_type n_type) {
                 }
             } else {
                 /* In case of a new file, simply sets its size to 0 */
+                // TODO - MAYBE (???) LOCK HERE?
                 inode_table[inumber].i_size = 0;
+                // TODO - MAYBE (???) UNLOCK HERE?
                 for (size_t i = 0; i < MAX_DIRECT_BLOCKS; i++) {
                     inode_table[inumber].i_data_block[i] = -1;
                 }
@@ -148,7 +154,9 @@ int inode_delete(int inumber) {
     insert_delay();
     insert_delay();
 
+    // TODO - MAYBE LOCK HERE
     if (!valid_inumber(inumber) || freeinode_ts[inumber] == FREE) {
+        // TODO - MAYBE UNLOCK HERE
         return -1;
     }
 
@@ -157,10 +165,12 @@ int inode_delete(int inumber) {
     if (inode_table[inumber].i_size > 0) {
         for (int i = 0; i < MAX_DIRECT_BLOCKS; i++) {
             if (data_block_free(inode_table[inumber].i_data_block[i]) == -1) {
+                // TODO - MAYBE UNLOCK HERE
                 return -1;
             }
         }
     }
+    // TODO - MAYBE UNLOCK HERE
 
     return 0;
 }
@@ -203,20 +213,24 @@ int add_dir_entry(int inumber, int sub_inumber, char const *sub_name) {
     }
 
     /* Locates the block containing the directory's entries */
+    // TODO - LOCK HERE
     dir_entry_t *dir_entry =
         (dir_entry_t *)data_block_get(inode_table[inumber].i_data_block[0]);
     if (dir_entry == NULL) {
         return -1;
     }
+    // TODO - UNLOCK HERE
 
     /* Finds and fills the first empty entry */
     for (size_t i = 0; i < MAX_DIR_ENTRIES; i++) {
+        // TODO - MAYBE LOCK HERE
         if (dir_entry[i].d_inumber == -1) {
             dir_entry[i].d_inumber = sub_inumber;
             strncpy(dir_entry[i].d_name, sub_name, MAX_FILE_NAME - 1);
             dir_entry[i].d_name[MAX_FILE_NAME - 1] = 0;
             return 0;
         }
+        // TODO - MAYBE UNLOCK HERE
     }
 
     return -1;
@@ -236,11 +250,13 @@ int find_in_dir(int inumber, char const *sub_name) {
     }
 
     /* Locates the block containing the directory's entries */
+    // TODO - READ LOCK HERE
     dir_entry_t *dir_entry =
         (dir_entry_t *)data_block_get(inode_table[inumber].i_data_block[0]);
     if (dir_entry == NULL) {
         return -1;
     }
+    // TODO - READ UNLOCK HERE
 
     /* Iterates over the directory entries looking for one that has the target
      * name */
@@ -263,10 +279,13 @@ int data_block_alloc() {
             insert_delay(); // simulate storage access delay to free_blocks
         }
 
+        // TODO - LOCK HERE
         if (free_blocks[i] == FREE) {
             free_blocks[i] = TAKEN;
+            // TODO - UNLOCK HERE
             return i;
         }
+        // TODO - UNLOCK HERE
     }
     return -1;
 }
@@ -308,12 +327,15 @@ void *data_block_get(int block_number) {
  */
 int add_to_open_file_table(int inumber, size_t offset) {
     for (int i = 0; i < MAX_OPEN_FILES; i++) {
+        // TODO - LOCK HERE
         if (free_open_file_entries[i] == FREE) {
             free_open_file_entries[i] = TAKEN;
+            // TODO - UNLOCK HERE
             open_file_table[i].of_inumber = inumber;
             open_file_table[i].of_offset = offset;
             return i;
         }
+        // TODO - UNLOCK HERE
     }
     return -1;
 }
@@ -324,10 +346,13 @@ int add_to_open_file_table(int inumber, size_t offset) {
  * Returns 0 is success, -1 otherwise
  */
 int remove_from_open_file_table(int fhandle) {
+    // TODO - LOCK HERE
     if (!valid_file_handle(fhandle) ||
         free_open_file_entries[fhandle] != TAKEN) {
+        // TODO - UNLOCK HERE
         return -1;
     }
+    // TODO - UNLOCK HERE
     free_open_file_entries[fhandle] = FREE;
     return 0;
 }
