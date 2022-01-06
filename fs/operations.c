@@ -149,7 +149,7 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
                     if (indirect_block == NULL) {
                         return -1;
                     }
-                    for (int j = MAX_DIRECT_BLOCKS; j < needed_blocks; j++) {
+                    for (int j = MAX_DIRECT_BLOCKS; j < previously_written_blocks + end_write_blocks; j++) {
                         indirect_block[j-MAX_DIRECT_BLOCKS] = -1; // they start at -1, allocated if needed
                     }
                 }
@@ -161,6 +161,9 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
 
                 if (indirect_block[i-MAX_DIRECT_BLOCKS] == -1) {
                     indirect_block[i-MAX_DIRECT_BLOCKS] = data_block_alloc();
+                    if (indirect_block[i-MAX_DIRECT_BLOCKS] == -1) {
+                        return -1;
+                    }
                 }
                 block = data_block_get(indirect_block[i-MAX_DIRECT_BLOCKS]);
                 if (block == NULL) {

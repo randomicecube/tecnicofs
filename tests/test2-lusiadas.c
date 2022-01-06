@@ -1,50 +1,54 @@
 #include "fs/operations.h"
 #include <assert.h>
 #include <string.h>
+#include <unistd.h>
+
+#define GRN "\x1B[32m"
+#define RESET "\x1B[0m"
 
 int main() {
     char *path = "/f1";
     char *buffer;
     char *str;
 
-    FILE *lusiadas = fopen("lusiadas.txt", "r");
-    long start = ftell(lusiadas);
-    fseek(lusiadas, 0, SEEK_END);
-    long delta = ftell(lusiadas) - start;
-    fseek(lusiadas, start, SEEK_SET);
-    buffer = (char *) malloc((size_t)(delta + 1));
-    str = (char *) malloc((size_t)(delta + 1));
-    fread(buffer, sizeof(char), (size_t) delta, lusiadas);
-    fclose(lusiadas);
-
     assert(tfs_init() != -1);
 
-    int f;
-    ssize_t r;
+    FILE *fp = fopen("lusiadas.txt", "r");
+    size_t start = (size_t) ftell(fp);
+    fseek(fp, 0, SEEK_END);
+    size_t end = (size_t) ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+    size_t delta = end - start;
+    str = malloc(delta + 1);
+    fread(str, 1, delta, fp);
+    str[delta] = '\0';
+    fclose(fp);
 
-    f = tfs_open(path, TFS_O_CREAT);
-    assert(f != -1);
+    buffer = malloc(delta + 1);
+    memset(buffer, 0, delta + 1);
+    
+    int fd = tfs_open(path, TFS_O_CREAT);
+    assert(fd != -1);
 
-    r = tfs_write(f, buffer, strlen(buffer));
-    assert(r == strlen(buffer));
+    ssize_t bytes_written = tfs_write(fd, str, strlen(str));
+    assert(bytes_written == strlen(str));
 
-    assert(tfs_close(f) != -1);
+    assert(tfs_close(fd) != -1);
 
-    f = tfs_open(path, 0);
-    assert(f != -1);
+    fd = tfs_open(path, 0);
+    assert(fd != -1);
 
-    r = tfs_read(f, str, sizeof(str) - 1);
-    assert(r == strlen(buffer));
+    ssize_t bytes_read = tfs_read(fd, buffer, delta);
+    assert(bytes_read == delta);
+    buffer[delta] = '\0';
 
-    buffer[r] = '\0';
     assert(strcmp(buffer, str) == 0);
+    assert(tfs_close(fd) != -1);
 
-    assert(tfs_close(f) != -1);
+    printf(GRN "Successful test.\n" RESET);
 
-    printf("Successful test.\n");
-
-    free(buffer);
     free(str);
+    free(buffer);
 
     return 0;
 }
