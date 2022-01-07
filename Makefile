@@ -35,6 +35,9 @@ CFLAGS += -fdiagnostics-color=always -Wall -Werror -Wextra -Wcast-align -Wconver
 # Warning suppressions
 CFLAGS += -Wno-sign-compare
 
+# Sanitizers
+CFLAGS += -fsanitize=thread
+
 # optional debug symbols: run make DEBUG=no to deactivate them
 ifneq ($(strip $(DEBUG)), no)
   CFLAGS += -g
@@ -46,6 +49,10 @@ ifeq ($(strip $(OPTIM)), no)
 else
   CFLAGS += -O3
 endif
+
+# Linker flags
+LDFLAGS = -lpthread
+LDFLAGS += -fsanitize=thread
 
 # A phony target is one that is not really the name of a file
 # https://www.gnu.org/software/make/manual/html_node/Phony-Targets.html
