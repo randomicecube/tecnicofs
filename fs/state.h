@@ -42,6 +42,10 @@ typedef struct {
 
 #define MAX_DIR_ENTRIES (BLOCK_SIZE / sizeof(dir_entry_t))
 
+void lock_mutex(pthread_mutex_t *mutex);
+void unlock_mutex(pthread_mutex_t *mutex);
+void init_mutex(pthread_mutex_t *mutex);
+
 void state_init();
 void state_destroy();
 
