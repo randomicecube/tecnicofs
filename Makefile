@@ -21,6 +21,7 @@ TARGET_EXECS += tests/copy_to_external_simple
 TARGET_EXECS += tests/write_10_blocks_simple
 TARGET_EXECS += tests/write_10_blocks_spill
 TARGET_EXECS += tests/write_more_than_10_blocks_simple
+TARGET_EXECS += tests/teste3
 
 # VPATH is a variable used by Makefile which finds *sources* and makes them available throughout the codebase
 # vpath %.h <DIR> tells make to look for header files in <DIR>
