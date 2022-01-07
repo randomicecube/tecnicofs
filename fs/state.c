@@ -22,6 +22,29 @@ static char free_blocks[DATA_BLOCKS];
 static open_file_entry_t open_file_table[MAX_OPEN_FILES];
 static char free_open_file_entries[MAX_OPEN_FILES];
 
+/* I-node creation lock - only locked while creating a node, to prevent
+ * two threads from creating the "same node" at the same time */
+static pthread_mutex_t inode_create_lock;
+
+/* Add a directory entry lock - only locked while adding a directory entry,
+ * to prevent two threads from adding the same directory entry at the same
+ * time */
+static pthread_mutex_t add_dir_entry_lock;
+
+/* Data block lock - only locked while allocating a block, to prevent two
+ * threads from accessing the same block at the same time */
+static pthread_mutex_t data_block_lock;
+
+/* Open file table lock - only locked while adding an entry to the open
+ * file table, to prevent two threads from adding the same entry at the
+ * same time */
+static pthread_mutex_t file_table_lock;
+
+/* Free locks map lock - only locked while looping through the free
+ * locks map, to prevent two threads from looping through the map at the
+ * same time */
+static pthread_mutex_t free_blocks_map_lock;
+
 static inline bool valid_inumber(int inumber) {
     return inumber >= 0 && inumber < INODE_TABLE_SIZE;
 }
@@ -62,9 +85,50 @@ static void insert_delay() {
 }
 
 /*
+ * Locks (and checks for errors) a given mutex
+ */
+void lock_mutex(pthread_mutex_t *mutex) {
+    if(pthread_mutex_lock(mutex) != 0) {
+        exit(EXIT_FAILURE);
+    }
+}
+
+/*
+ * Unlocks (and checks for errors) a given mutex
+ */
+void unlock_mutex(pthread_mutex_t *mutex) {
+    if(pthread_mutex_unlock(mutex) != 0) {
+        exit(EXIT_FAILURE);
+    }
+}
+
+/*
+ * Initializes (and checks for errors) a given mutex
+ */
+void init_mutex(pthread_mutex_t *mutex) {
+    if(pthread_mutex_init(mutex, NULL) != 0) {
+        exit(EXIT_FAILURE);
+    }
+}
+
+/*
+ * Destroys (and checks for errors) a given mutex
+ */
+void destroy_mutex(pthread_mutex_t *mutex) {
+    if(pthread_mutex_destroy(mutex) != 0) {
+        exit(EXIT_FAILURE);
+    }
+}
+
+/*
  * Initializes FS state
  */
 void state_init() {
+    init_mutex(&inode_create_lock);
+    init_mutex(&add_dir_entry_lock);
+    init_mutex(&data_block_lock);
+    init_mutex(&file_table_lock);
+    init_mutex(&free_blocks_map_lock);
     for (size_t i = 0; i < INODE_TABLE_SIZE; i++) {
         freeinode_ts[i] = FREE;
     }
@@ -94,12 +158,11 @@ int inode_create(inode_type n_type) {
             insert_delay(); // simulate storage access delay (to freeinode_ts)
         }
 
+        lock_mutex(&inode_create_lock);
         /* Finds first free entry in i-node table */
-        // TODO - LOCK HERE
         if (freeinode_ts[inumber] == FREE) {
             /* Found a free entry, so takes it for the new i-node*/
             freeinode_ts[inumber] = TAKEN;
-            // TODO - UNLOCK HERE
             insert_delay(); // simulate storage access delay (to i-node)
             inode_table[inumber].i_node_type = n_type;
 
@@ -109,18 +172,20 @@ int inode_create(inode_type n_type) {
                 int b = data_block_alloc();
                 if (b == -1) {
                     freeinode_ts[inumber] = FREE;
+                    unlock_mutex(&inode_create_lock);
                     return -1;
                 }
 
                 inode_table[inumber].i_size = BLOCK_SIZE;
                 inode_table[inumber].i_data_block[0] = b;
                 inode_table[inumber].i_indirect_data_block = -1;
+                init_mutex(&inode_table[inumber].i_lock);
 
-                // TODO - MAYBE LOCK HERE?
                 dir_entry_t *dir_entry = (dir_entry_t *)data_block_get(b);
-                // TODO - MAYBE UNLOCK HERE?
                 if (dir_entry == NULL) {
                     freeinode_ts[inumber] = FREE;
+                    unlock_mutex(&inode_create_lock);
+                    destroy_mutex(&inode_table[inumber].i_lock);
                     return -1;
                 }
 
@@ -129,15 +194,17 @@ int inode_create(inode_type n_type) {
                 }
             } else {
                 /* In case of a new file, simply sets its size to 0 */
-                // TODO - MAYBE (???) LOCK HERE?
                 inode_table[inumber].i_size = 0;
-                // TODO - MAYBE (???) UNLOCK HERE?
                 for (size_t i = 0; i < MAX_DIRECT_BLOCKS; i++) {
                     inode_table[inumber].i_data_block[i] = -1;
                 }
                 inode_table[inumber].i_indirect_data_block = -1;
+                init_mutex(&inode_table[inumber].i_lock);
             }
+            unlock_mutex(&inode_create_lock);
             return inumber;
+        } else {
+            unlock_mutex(&inode_create_lock);
         }
     }
     return -1;
@@ -154,9 +221,7 @@ int inode_delete(int inumber) {
     insert_delay();
     insert_delay();
 
-    // TODO - MAYBE LOCK HERE
     if (!valid_inumber(inumber) || freeinode_ts[inumber] == FREE) {
-        // TODO - MAYBE UNLOCK HERE
         return -1;
     }
 
@@ -164,13 +229,14 @@ int inode_delete(int inumber) {
 
     if (inode_table[inumber].i_size > 0) {
         for (int i = 0; i < MAX_DIRECT_BLOCKS; i++) {
+            lock_mutex(&data_block_lock);
             if (data_block_free(inode_table[inumber].i_data_block[i]) == -1) {
-                // TODO - MAYBE UNLOCK HERE
+                unlock_mutex(&data_block_lock);
                 return -1;
             }
+            unlock_mutex(&data_block_lock);
         }
     }
-    // TODO - MAYBE UNLOCK HERE
 
     return 0;
 }
@@ -213,24 +279,26 @@ int add_dir_entry(int inumber, int sub_inumber, char const *sub_name) {
     }
 
     /* Locates the block containing the directory's entries */
-    // TODO - LOCK HERE
+    lock_mutex(&inode_table[inumber].i_lock);
     dir_entry_t *dir_entry =
         (dir_entry_t *)data_block_get(inode_table[inumber].i_data_block[0]);
+    unlock_mutex(&inode_table[inumber].i_lock);
     if (dir_entry == NULL) {
         return -1;
     }
-    // TODO - UNLOCK HERE
 
     /* Finds and fills the first empty entry */
     for (size_t i = 0; i < MAX_DIR_ENTRIES; i++) {
-        // TODO - MAYBE LOCK HERE
+        lock_mutex(&add_dir_entry_lock);
         if (dir_entry[i].d_inumber == -1) {
             dir_entry[i].d_inumber = sub_inumber;
             strncpy(dir_entry[i].d_name, sub_name, MAX_FILE_NAME - 1);
             dir_entry[i].d_name[MAX_FILE_NAME - 1] = 0;
+            unlock_mutex(&add_dir_entry_lock);
             return 0;
+        } else {
+            unlock_mutex(&add_dir_entry_lock);
         }
-        // TODO - MAYBE UNLOCK HERE
     }
 
     return -1;
@@ -250,13 +318,13 @@ int find_in_dir(int inumber, char const *sub_name) {
     }
 
     /* Locates the block containing the directory's entries */
-    // TODO - READ LOCK HERE
+    lock_mutex(&inode_table[inumber].i_lock);
     dir_entry_t *dir_entry =
         (dir_entry_t *)data_block_get(inode_table[inumber].i_data_block[0]);
+    unlock_mutex(&inode_table[inumber].i_lock);
     if (dir_entry == NULL) {
         return -1;
     }
-    // TODO - READ UNLOCK HERE
 
     /* Iterates over the directory entries looking for one that has the target
      * name */
@@ -279,13 +347,14 @@ int data_block_alloc() {
             insert_delay(); // simulate storage access delay to free_blocks
         }
 
-        // TODO - LOCK HERE
+        lock_mutex(&data_block_lock);
         if (free_blocks[i] == FREE) {
             free_blocks[i] = TAKEN;
-            // TODO - UNLOCK HERE
+            unlock_mutex(&data_block_lock);
             return i;
+        } else {
+            unlock_mutex(&data_block_lock);
         }
-        // TODO - UNLOCK HERE
     }
     return -1;
 }
@@ -327,15 +396,16 @@ void *data_block_get(int block_number) {
  */
 int add_to_open_file_table(int inumber, size_t offset) {
     for (int i = 0; i < MAX_OPEN_FILES; i++) {
-        // TODO - LOCK HERE
+        lock_mutex(&file_table_lock);
         if (free_open_file_entries[i] == FREE) {
             free_open_file_entries[i] = TAKEN;
-            // TODO - UNLOCK HERE
             open_file_table[i].of_inumber = inumber;
             open_file_table[i].of_offset = offset;
+            unlock_mutex(&file_table_lock);
             return i;
+        } else {
+            unlock_mutex(&file_table_lock);
         }
-        // TODO - UNLOCK HERE
     }
     return -1;
 }
@@ -346,14 +416,14 @@ int add_to_open_file_table(int inumber, size_t offset) {
  * Returns 0 is success, -1 otherwise
  */
 int remove_from_open_file_table(int fhandle) {
-    // TODO - LOCK HERE
+    lock_mutex(&file_table_lock);
     if (!valid_file_handle(fhandle) ||
         free_open_file_entries[fhandle] != TAKEN) {
-        // TODO - UNLOCK HERE
+        unlock_mutex(&file_table_lock);
         return -1;
     }
-    // TODO - UNLOCK HERE
     free_open_file_entries[fhandle] = FREE;
+    unlock_mutex(&file_table_lock);
     return 0;
 }
 

@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
+#include <pthread.h>
 
 /*
  * Directory entry
@@ -40,6 +41,10 @@ typedef struct {
 } open_file_entry_t;
 
 #define MAX_DIR_ENTRIES (BLOCK_SIZE / sizeof(dir_entry_t))
+
+void lock_mutex(pthread_mutex_t *mutex);
+void unlock_mutex(pthread_mutex_t *mutex);
+void init_mutex(pthread_mutex_t *mutex);
 
 void state_init();
 void state_destroy();
