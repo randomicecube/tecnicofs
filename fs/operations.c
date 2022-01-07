@@ -143,11 +143,11 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
         size_t previously_written_blocks = file->of_offset / BLOCK_SIZE; //is it offset or isize?
         size_t end_write_blocks = (file->of_offset + to_write) / BLOCK_SIZE;    
         size_t current_write_size = BLOCK_SIZE;
+        size_t buffer_offset = 0;
         if (to_write % BLOCK_SIZE > 0) {
             end_write_blocks++;
         }
         // TODO - UNLOCK
-
 
         for (size_t i = previously_written_blocks; i < previously_written_blocks + end_write_blocks; i++, to_write -= BLOCK_SIZE) {
             current_write_size = (to_write > BLOCK_SIZE ? BLOCK_SIZE : to_write);
@@ -198,13 +198,18 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
                 // TODO - UNLOCK
             }
             // TODO - LOCK
-            memcpy(block + file->of_offset % BLOCK_SIZE, buffer + file->of_offset, current_write_size);
+            memcpy(block + file->of_offset % BLOCK_SIZE, buffer + buffer_offset, current_write_size);
             // TODO - UNLOCK
             bytes_written += current_write_size;
+            buffer_offset += current_write_size;
             // TODO - LOCK
             file->of_offset += current_write_size;
             if (file->of_offset > inode->i_size) {
                 inode->i_size = file->of_offset;
+            }
+            if ((int) to_write - BLOCK_SIZE <= 0) {
+                // TODO - UNLOCK
+                break;
             }
             // TODO - UNLOCK
         }
@@ -273,6 +278,10 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
         bytes_read += current_read_size;
         file->of_offset += current_read_size;
         buffer_offset += current_read_size;
+        if ((int) to_read - BLOCK_SIZE <= 0) {
+            // TODO - UNLOCK
+            break;
+        }
     }
 
     return (ssize_t) bytes_read;
@@ -281,7 +290,7 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
 // TODO -  fazer isto thread-safe, ver https://piazza.com/class/kwp87w2smmq66p?cid=84
 int tfs_copy_to_external_fs(char const *source_path, char const *dest_path) {
     // TODO - LOCK
-    int source_handle = tfs_open(source_path, TFS_O_CREAT); // não precisa de flags especificas, so nao pode é ser a TRUNC
+    int source_handle = tfs_open(source_path, 0); // não precisa de flags especificas, so nao pode é ser a TRUNC
     if (source_handle == -1) {
         // TODO - UNLOCK
         return -1;
