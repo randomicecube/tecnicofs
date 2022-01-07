@@ -1,5 +1,4 @@
-#include "../fs/operations.h"
-#include "../fs/state.h"
+#include "fs/operations.h"
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>
