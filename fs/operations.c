@@ -307,7 +307,6 @@ int tfs_copy_to_external_fs(char const *source_path, char const *dest_path) {
     void *buffer;
     buffer = malloc(BLOCK_SIZE);
     if (buffer == NULL) {
-        unlock_mutex(&source_inode->i_lock);
         return -1;
     }
 
