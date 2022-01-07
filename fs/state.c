@@ -142,7 +142,16 @@ void state_init() {
     }
 }
 
-void state_destroy() { /* nothing to do */
+void state_destroy() {
+    destroy_mutex(&inode_create_lock);
+    destroy_mutex(&add_dir_entry_lock);
+    destroy_mutex(&data_block_lock);
+    destroy_mutex(&file_table_lock);
+    destroy_mutex(&free_blocks_map_lock);
+    // destroy mutexes in inode table
+    for (size_t i = 0; i < INODE_TABLE_SIZE; i++) {
+        destroy_mutex(&inode_table[i].i_lock);
+    }
 }
 
 /*
@@ -229,12 +238,9 @@ int inode_delete(int inumber) {
 
     if (inode_table[inumber].i_size > 0) {
         for (int i = 0; i < MAX_DIRECT_BLOCKS; i++) {
-            lock_mutex(&data_block_lock);
             if (data_block_free(inode_table[inumber].i_data_block[i]) == -1) {
-                unlock_mutex(&data_block_lock);
                 return -1;
             }
-            unlock_mutex(&data_block_lock);
         }
     }
 
@@ -370,7 +376,9 @@ int data_block_free(int block_number) {
     }
 
     insert_delay(); // simulate storage access delay to free_blocks
+    lock_mutex(&data_block_lock);
     free_blocks[block_number] = FREE;
+    unlock_mutex(&data_block_lock);
     return 0;
 }
 
@@ -401,6 +409,7 @@ int add_to_open_file_table(int inumber, size_t offset) {
             free_open_file_entries[i] = TAKEN;
             open_file_table[i].of_inumber = inumber;
             open_file_table[i].of_offset = offset;
+            init_mutex(&open_file_table[i].file_lock);
             unlock_mutex(&file_table_lock);
             return i;
         } else {
@@ -423,6 +432,7 @@ int remove_from_open_file_table(int fhandle) {
         return -1;
     }
     free_open_file_entries[fhandle] = FREE;
+    destroy_mutex(&open_file_table[fhandle].file_lock);
     unlock_mutex(&file_table_lock);
     return 0;
 }
