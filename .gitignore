@@ -1,2 +1,2 @@
-tests/*.o
+**/*.o
 tests/*.out
