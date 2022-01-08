@@ -65,7 +65,6 @@ int tfs_open(char const *name, int flags) {
                         return -1;
                     }
                 }
-                // TODO - free indirect blocks thorougly
                 if (data_block_free(inode->i_indirect_data_block) == -1) {
                     unlock_mutex(&inode->i_lock);
                     return -1;
@@ -118,7 +117,9 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
     }
 
     /* From the open file table entry, we get the inode */
+    lock_mutex(&file->file_lock);
     inode_t *inode = inode_get(file->of_inumber);
+    unlock_mutex(&file->file_lock);
     if (inode == NULL) {
         return -1;
     }
@@ -269,7 +270,6 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
         bytes_read += current_read_size;
         file->of_offset += current_read_size;
         buffer_offset += current_read_size;
-
         if ((int) to_read - BLOCK_SIZE <= 0) {
             break;
         }

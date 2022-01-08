@@ -1,2 +1,4 @@
-tests/*.o
-tests/*.out
+**/*.o
+tests/*
+!tests/*.c
+!tests/*.txt

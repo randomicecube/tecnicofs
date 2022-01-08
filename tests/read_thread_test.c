@@ -15,16 +15,11 @@ typedef struct {
     pthread_mutex_t lock;
 } thread_data;
 
-void *write_thread(void *arg) {
-  // arg is the thread_data struct
+void *read_thread(void *arg) {
   thread_data *data = (thread_data *) arg;
-  // write current iteration in the buffer and write the buffer, with tfs_write, in the file with fd
-  char buffer[40];
-  lock_mutex(&data->lock);
-  sprintf(buffer, "%d", data->iteration);
-  unlock_mutex(&data->lock);
-  ssize_t r = tfs_write(data->fd, buffer, strlen(buffer));
-  assert(r == strlen(buffer));
+  char *buffer = malloc(BLOCK_SIZE);
+  tfs_read(data->fd, buffer, BLOCK_SIZE);
+  free(buffer);
   return NULL;
 }
 
@@ -32,12 +27,33 @@ int main() {
   assert(tfs_init() != -1);
 
   char *path = "/f1";
+  char *str;
+
+  FILE *fp = fopen("lusiadas.txt", "r");
+  size_t start = (size_t) ftell(fp);
+  fseek(fp, 0, SEEK_END);
+  size_t end = (size_t) ftell(fp);
+  fseek(fp, 0, SEEK_SET);
+  size_t delta = end - start;
+  str = malloc(delta + 1);
+  fread(str, 1, delta, fp);
+  str[delta] = '\0';
+  fclose(fp);
+
   int fd = tfs_open(path, TFS_O_CREAT);
+  assert(fd != -1);
+
+  ssize_t bytes_written = tfs_write(fd, str, strlen(str));
+  assert(bytes_written == strlen(str));
+
+  assert(tfs_close(fd) != -1);
+
+  fd = tfs_open(path, 0);
   assert(fd != -1);
 
   thread_data *data = malloc(sizeof(thread_data));
   if (data == NULL) {
-    perror("malloc error");
+    perror("malloc failed");
     exit(EXIT_FAILURE);
   }
   data->fd = fd;
@@ -51,7 +67,7 @@ int main() {
     lock_mutex(&data->lock);
     data->iteration = i;
     unlock_mutex(&data->lock);
-    pthread_create(&tid[i], NULL, write_thread, data);
+    pthread_create(&tid[i], NULL, read_thread, data);
   }
 
   for (int i = 0; i < 6 * BLOCK_SIZE; i++) {
@@ -62,7 +78,6 @@ int main() {
     perror("mutex destroy error");
     exit(EXIT_FAILURE);
   }
-
   free(data);
 
   assert(tfs_close(fd) != -1);
