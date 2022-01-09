@@ -172,6 +172,8 @@ int inode_create(inode_type n_type) {
         if (freeinode_ts[inumber] == FREE) {
             /* Found a free entry, so takes it for the new i-node*/
             freeinode_ts[inumber] = TAKEN;
+            unlock_mutex(&inode_create_lock);
+            init_mutex(&inode_table[inumber].i_lock);
             insert_delay(); // simulate storage access delay (to i-node)
             inode_table[inumber].i_node_type = n_type;
 
@@ -188,7 +190,6 @@ int inode_create(inode_type n_type) {
                 inode_table[inumber].i_size = BLOCK_SIZE;
                 inode_table[inumber].i_data_block[0] = b;
                 inode_table[inumber].i_indirect_data_block = -1;
-                init_mutex(&inode_table[inumber].i_lock);
 
                 dir_entry_t *dir_entry = (dir_entry_t *)data_block_get(b);
                 if (dir_entry == NULL) {
@@ -203,18 +204,16 @@ int inode_create(inode_type n_type) {
                 }
             } else {
                 /* In case of a new file, simply sets its size to 0 */
+                init_mutex(&inode_table[inumber].i_lock);
                 inode_table[inumber].i_size = 0;
                 for (size_t i = 0; i < MAX_DIRECT_BLOCKS; i++) {
                     inode_table[inumber].i_data_block[i] = -1;
                 }
                 inode_table[inumber].i_indirect_data_block = -1;
-                init_mutex(&inode_table[inumber].i_lock);
             }
-            unlock_mutex(&inode_create_lock);
             return inumber;
-        } else {
-            unlock_mutex(&inode_create_lock);
-        }
+        } 
+        unlock_mutex(&inode_create_lock);
     }
     return -1;
 }
@@ -308,9 +307,8 @@ int add_dir_entry(int inumber, int sub_inumber, char const *sub_name) {
             dir_entry[i].d_name[MAX_FILE_NAME - 1] = 0;
             unlock_mutex(&dir_lock);
             return 0;
-        } else {
-            unlock_mutex(&dir_lock);
         }
+        unlock_mutex(&dir_lock);
     }
 
     return -1;
@@ -417,10 +415,10 @@ int add_to_open_file_table(int inumber, size_t offset) {
         lock_mutex(&file_table_lock);
         if (free_open_file_entries[i] == FREE) {
             free_open_file_entries[i] = TAKEN;
+            unlock_mutex(&file_table_lock);
             open_file_table[i].of_inumber = inumber;
             open_file_table[i].of_offset = offset;
             init_mutex(&open_file_table[i].file_lock);
-            unlock_mutex(&file_table_lock);
             return i;
         }
         unlock_mutex(&file_table_lock);
