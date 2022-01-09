@@ -7,18 +7,25 @@
 
 #define GRN "\x1B[32m"
 #define RESET "\x1B[0m"
+#define NUM_THREADS 1367 // random number
 
 // struct that keeps the current iteration and file descriptor
 typedef struct {
-    int iteration;
-    int fd;
-    pthread_mutex_t lock;
+  char *path;
+  size_t bytes;
+  pthread_mutex_t lock;
 } thread_data;
 
 void *read_thread(void *arg) {
   thread_data *data = (thread_data *) arg;
-  char *buffer = malloc(BLOCK_SIZE);
-  tfs_read(data->fd, buffer, BLOCK_SIZE);
+  char *buffer = malloc(data->bytes);
+  int fd;
+  lock_mutex(&data->lock);
+  assert((fd = tfs_open(data->path, 0)) != -1);
+  ssize_t bytes_read = tfs_read(fd, buffer, data->bytes);
+  assert(bytes_read == data->bytes);
+  assert(tfs_close(fd) != -1);
+  unlock_mutex(&data->lock);
   free(buffer);
   return NULL;
 }
@@ -48,29 +55,24 @@ int main() {
 
   assert(tfs_close(fd) != -1);
 
-  fd = tfs_open(path, 0);
-  assert(fd != -1);
-
   thread_data *data = malloc(sizeof(thread_data));
   if (data == NULL) {
     perror("malloc failed");
     exit(EXIT_FAILURE);
   }
-  data->fd = fd;
+  data->path = path;
+  data->bytes = (size_t) bytes_written;
   if (pthread_mutex_init(&data->lock, NULL)) {
     perror("mutex init error");
     exit(EXIT_FAILURE);
   }
   
-  pthread_t tid[6 * BLOCK_SIZE];
-  for (int i = 0; i < 6 * BLOCK_SIZE; i++) {
-    lock_mutex(&data->lock);
-    data->iteration = i;
-    unlock_mutex(&data->lock);
+  pthread_t tid[NUM_THREADS];
+  for (int i = 0; i < NUM_THREADS; i++) {
     pthread_create(&tid[i], NULL, read_thread, data);
   }
 
-  for (int i = 0; i < 6 * BLOCK_SIZE; i++) {
+  for (int i = 0; i < NUM_THREADS; i++) {
     pthread_join(tid[i], NULL);
   }
 
@@ -79,8 +81,6 @@ int main() {
     exit(EXIT_FAILURE);
   }
   free(data);
-
-  assert(tfs_close(fd) != -1);
 
   assert(tfs_destroy() != -1);
 
