@@ -46,6 +46,7 @@ typedef struct {
 void lock_mutex(pthread_mutex_t *mutex);
 void unlock_mutex(pthread_mutex_t *mutex);
 void init_mutex(pthread_mutex_t *mutex);
+void destroy_mutex(pthread_mutex_t *mutex);
 
 void state_init();
 void state_destroy();
