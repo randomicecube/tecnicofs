@@ -78,8 +78,8 @@ int main() {
     lock_mutex(&data->lock);
     strcat(data->path, iteration);
     int fd = tfs_open(data->path, TFS_O_CREAT);
-    assert(fd != -1);
     unlock_mutex(&data->lock);
+    assert(fd != -1);
   
     size_t bytes_written = (size_t) tfs_write(fd, str, strlen(str));
 
