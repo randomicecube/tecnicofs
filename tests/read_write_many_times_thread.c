@@ -7,7 +7,7 @@
 
 #define GRN "\x1B[32m"
 #define RESET "\x1B[0m"
-#define NUM_THREADS 127 // random number
+#define NUM_THREADS 17 // random number
 
 // struct that keeps the current iteration and file descriptor
 typedef struct {
@@ -19,13 +19,14 @@ typedef struct {
 void *read_thread(void *arg) {
   thread_data *data = (thread_data *) arg;
   lock_mutex(&data->lock);
-  char *buffer = malloc(data->bytes);
+  size_t bytes_to_be_read = data->bytes;
+  char *buffer = malloc(bytes_to_be_read);
   int fd;
   assert((fd = tfs_open(data->path, 0)) != -1);
-  ssize_t bytes_read = tfs_read(fd, buffer, data->bytes);
-  assert(bytes_read == data->bytes);
-  assert(tfs_close(fd) != -1);
   unlock_mutex(&data->lock);
+  ssize_t bytes_read = tfs_read(fd, buffer, bytes_to_be_read);
+  assert(bytes_read == bytes_to_be_read);
+  assert(tfs_close(fd) != -1);
   free(buffer);
   return NULL;
 }
@@ -33,15 +34,14 @@ void *read_thread(void *arg) {
 void *write_thread(void *arg) {
   thread_data *data = (thread_data *) arg;
   lock_mutex(&data->lock);
-  char *buffer = malloc(data->bytes);
+  size_t bytes_to_be_written = data->bytes;
+  char *buffer = malloc(bytes_to_be_written);
   int fd;
   assert((fd = tfs_open(data->path, 0)) != -1);
   unlock_mutex(&data->lock);
-  ssize_t bytes_written = tfs_write(fd, buffer, data->bytes);
-  lock_mutex(&data->lock);
-  assert(bytes_written == data->bytes);
+  ssize_t bytes_written = tfs_write(fd, buffer, bytes_to_be_written);
+  assert(bytes_written == bytes_to_be_written);
   assert(tfs_close(fd) != -1);
-  unlock_mutex(&data->lock);
   free(buffer);
   return NULL;
 }
@@ -77,14 +77,15 @@ int main() {
     sprintf(iteration, "%d", i);
     lock_mutex(&data->lock);
     strcat(data->path, iteration);
-    unlock_mutex(&data->lock);
-    int fd = tfs_open(path, TFS_O_CREAT);
+    int fd = tfs_open(data->path, TFS_O_CREAT);
     assert(fd != -1);
+    unlock_mutex(&data->lock);
   
     size_t bytes_written = (size_t) tfs_write(fd, str, strlen(str));
+
+    assert(bytes_written == strlen(str));    
     lock_mutex(&data->lock);
     data->bytes = bytes_written;
-    assert(data->bytes == strlen(str));
     unlock_mutex(&data->lock);
   
     assert(tfs_close(fd) != -1);

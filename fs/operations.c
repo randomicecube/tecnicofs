@@ -59,13 +59,17 @@ int tfs_open(char const *name, int flags) {
         if (flags & TFS_O_TRUNC) {
             lock_mutex(&inode->i_lock);
             if (inode->i_size > 0) {
-                for (int i = 0; i < MAX_DIRECT_BLOCKS; i++) {
+                size_t written_blocks = inode->i_size / BLOCK_SIZE;
+                if (written_blocks % BLOCK_SIZE != 0) {
+                    written_blocks++;
+                }
+                for (int i = 0; i < written_blocks; i++) {
                     if (data_block_free(inode->i_data_block[i]) == -1) {
                         unlock_mutex(&inode->i_lock);
                         return -1;
                     }
                 }
-                if (data_block_free(inode->i_indirect_data_block) == -1) {
+                if (written_blocks >= MAX_DIRECT_BLOCKS && data_block_free(inode->i_indirect_data_block) == -1) {
                     unlock_mutex(&inode->i_lock);
                     return -1;
                 }
@@ -165,7 +169,7 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
                         unlock_mutex(&inode->i_lock);
                         return -1;
                     }
-                    for (int j = MAX_DIRECT_BLOCKS; j < previously_written_blocks + end_write_blocks; j++) {
+                    for (int j = MAX_DIRECT_BLOCKS; j < BLOCK_SIZE; j++) {
                         indirect_block[j-MAX_DIRECT_BLOCKS] = -1; // they start at -1, allocated if needed
                     }
                 }

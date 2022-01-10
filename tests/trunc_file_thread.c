@@ -7,19 +7,20 @@
 
 #define GRN "\x1B[32m"
 #define RESET "\x1B[0m"
-#define NUM_THREADS 173 // random number
+#define NUM_THREADS 274 // random number
 
 // struct that keeps the current iteration and file descriptor
 typedef struct {
   char *path;
-    pthread_mutex_t lock;
+  pthread_mutex_t lock;
 } thread_data;
 
 void *write_thread(void *arg) {
   thread_data *data = (thread_data *) arg;
   char *buffer = "Lorem ipsum, or lipsum as it is sometimes known, is dummy text used in laying out print, graphic or web designs. The passage is attributed to an unknown typesetter in the 15th century who is thought to have scrambled parts of Cicero's De Finibus Bonorum et Malorum for use in a type specimen book.";
   lock_mutex(&data->lock);
-  int fd = tfs_open(data->path, TFS_O_APPEND);
+  int fd = tfs_open(data->path, TFS_O_TRUNC);
+  assert(fd != -1);
   unlock_mutex(&data->lock);
   ssize_t r = tfs_write(fd, buffer, strlen(buffer));
   assert(tfs_close(fd) != -1);

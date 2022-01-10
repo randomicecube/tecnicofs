@@ -28,6 +28,7 @@ TARGET_EXECS += tests/read_and_write_thread_test
 TARGET_EXECS += tests/copy_external_fs_thread
 TARGET_EXECS += tests/read_write_many_times_thread
 TARGET_EXECS += tests/append_file_thread
+TARGET_EXECS += tests/trunc_file_thread
 
 # VPATH is a variable used by Makefile which finds *sources* and makes them available throughout the codebase
 # vpath %.h <DIR> tells make to look for header files in <DIR>
@@ -98,6 +99,7 @@ tests/read_and_write_thread_test: tests/read_and_write_thread_test.o fs/operatio
 tests/copy_external_fs_thread: tests/copy_external_fs_thread.o fs/operations.o fs/state.o
 tests/read_write_many_times_thread: tests/read_write_many_times_thread.o fs/operations.o fs/state.o
 tests/append_file_thread: tests/append_file_thread.o fs/operations.o fs/state.o
+tests/trunc_file_thread: tests/trunc_file_thread.o fs/operations.o fs/state.o
 
 clean:
 	rm -f $(OBJECTS) $(TARGET_EXECS)
