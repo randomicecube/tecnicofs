@@ -138,7 +138,6 @@ void state_init() {
 }
 
 void state_destroy() {
-    // destroy mutexes in inode table
     for (size_t i = 0; i < INODE_TABLE_SIZE; i++) {
         destroy_mutex(&inode_table_locks[i]);
     }

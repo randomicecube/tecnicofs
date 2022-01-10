@@ -8,7 +8,6 @@
 #define GRN "\x1B[32m"
 #define RESET "\x1B[0m"
 
-// struct that keeps the current iteration and file descriptor
 typedef struct {
     int iteration;
     int fd;

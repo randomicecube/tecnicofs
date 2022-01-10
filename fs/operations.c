@@ -138,7 +138,7 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
         lock_mutex(file_lock);
         size_t initial_offset = file->of_offset;
         unlock_mutex(file_lock);
-        size_t previously_written_blocks = initial_offset / BLOCK_SIZE; //is it offset or isize?
+        size_t previously_written_blocks = initial_offset / BLOCK_SIZE;
         size_t end_write_blocks = (initial_offset + to_write) / BLOCK_SIZE;    
         size_t current_write_size = BLOCK_SIZE;
         size_t buffer_offset = 0;
@@ -343,7 +343,7 @@ int tfs_copy_to_external_fs(char const *source_path, char const *dest_path) {
             free(buffer);
             return -1;
         }
-    } while (bytes_read == BLOCK_SIZE); // stops when it reads less than BLOCK_SIZE (we have, then, read the final block)
+    } while (bytes_read == BLOCK_SIZE); // stops when it reads less than BLOCK_SIZE bytes
 
     free(buffer);
 

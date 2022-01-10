@@ -9,7 +9,6 @@
 #define RESET "\x1B[0m"
 #define NUM_THREADS 1367 // random number
 
-// struct that keeps the current iteration and file descriptor
 typedef struct {
   char *path;
   size_t bytes;

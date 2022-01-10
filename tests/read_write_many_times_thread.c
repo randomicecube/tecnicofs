@@ -9,7 +9,6 @@
 #define RESET "\x1B[0m"
 #define NUM_THREADS 17 // random number
 
-// struct that keeps the current iteration and file descriptor
 typedef struct {
   char *path;
   size_t bytes;
@@ -70,8 +69,6 @@ int main() {
   data->path = path;
   init_mutex(&data->lock);
 
-  /* Section below aims to test writing and reading in parallel to different files*/
-  
   pthread_t tid[NUM_THREADS];
   for (int i = 0; i < NUM_THREADS; i++) {
     sprintf(iteration, "%d", i);
