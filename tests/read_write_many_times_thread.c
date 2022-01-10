@@ -4,10 +4,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include <unistd.h>
 
 #define GRN "\x1B[32m"
 #define RESET "\x1B[0m"
-#define NUM_THREADS 17 // random number
+#define NUM_THREADS 20 // random number
 
 typedef struct {
   char *path;
@@ -16,6 +17,7 @@ typedef struct {
 } thread_data;
 
 void *read_thread(void *arg) {
+  sleep(1);
   thread_data *data = (thread_data *) arg;
   lock_mutex(&data->lock);
   size_t bytes_to_be_read = data->bytes;
@@ -31,6 +33,7 @@ void *read_thread(void *arg) {
 }
 
 void *write_thread(void *arg) {
+  sleep(1);
   thread_data *data = (thread_data *) arg;
   lock_mutex(&data->lock);
   size_t bytes_to_be_written = data->bytes;

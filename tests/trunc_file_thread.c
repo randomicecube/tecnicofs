@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include <unistd.h>
 
 #define GRN "\x1B[32m"
 #define RESET "\x1B[0m"
@@ -17,6 +18,7 @@ typedef struct {
 char *buffer = "Lorem ipsum, or lipsum as it is sometimes known, is dummy text used in laying out print, graphic or web designs. The passage is attributed to an unknown typesetter in the 15th century who is thought to have scrambled parts of Cicero's De Finibus Bonorum et Malorum for use in a type specimen book.";
 
 void *write_thread(void *arg) {
+  sleep(1);
   thread_data *data = (thread_data *) arg;
   lock_mutex(&data->lock);
   int fd = tfs_open(data->path, TFS_O_TRUNC);

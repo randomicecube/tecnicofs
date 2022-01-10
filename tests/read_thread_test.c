@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include <unistd.h>
 
 #define GRN "\x1B[32m"
 #define RESET "\x1B[0m"
@@ -16,6 +17,7 @@ typedef struct {
 } thread_data;
 
 void *read_thread(void *arg) {
+  sleep(1);
   thread_data *data = (thread_data *) arg;
   char *buffer = malloc(data->bytes);
   if (buffer == NULL) {

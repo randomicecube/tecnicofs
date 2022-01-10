@@ -4,14 +4,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include <unistd.h>
 
 #define GRN "\x1B[32m"
 #define RESET "\x1B[0m"
-#define NUM_THREADS 173 // random number
+#define NUM_THREADS 171 // random number
 
 int expected_final_bytes_read = 0;
 int upper_bound_digits = 10;
 int current_increment = 1;
+int counter = 0;
 
 typedef struct {
   char *path;
@@ -20,9 +22,15 @@ typedef struct {
 } thread_data;
 
 void *write_thread(void *arg) {
+  sleep(1);
   thread_data *data = (thread_data *) arg;
   char *buffer = malloc(16);
+  if (buffer == NULL) {
+    perror("malloc error");
+    exit(EXIT_FAILURE);
+  }
   lock_mutex(&data->lock);
+  data->iteration = counter++;
   if (data->iteration >= upper_bound_digits) {
     upper_bound_digits *= 10;
     current_increment++;
@@ -55,9 +63,6 @@ int main() {
   
   pthread_t tid[NUM_THREADS];
   for (int i = 0; i < NUM_THREADS; i++) {
-    lock_mutex(&data->lock);
-    data->iteration = i;
-    unlock_mutex(&data->lock);
     if (pthread_create(&tid[i], NULL, write_thread, data) != 0) {
       perror("pthread_create error");
       exit(EXIT_FAILURE);
