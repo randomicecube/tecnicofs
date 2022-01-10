@@ -74,17 +74,20 @@ int main() {
   
   pthread_t tid[NUM_THREADS];
   for (int i = 0; i < NUM_THREADS; i++) {
-    lock_mutex(&data->lock);
     sprintf(iteration, "%d", i);
+    lock_mutex(&data->lock);
     strcat(data->path, iteration);
+    unlock_mutex(&data->lock);
     int fd = tfs_open(path, TFS_O_CREAT);
     assert(fd != -1);
   
-    data->bytes = (size_t) tfs_write(fd, str, strlen(str));
+    size_t bytes_written = (size_t) tfs_write(fd, str, strlen(str));
+    lock_mutex(&data->lock);
+    data->bytes = bytes_written;
     assert(data->bytes == strlen(str));
+    unlock_mutex(&data->lock);
   
     assert(tfs_close(fd) != -1);
-    unlock_mutex(&data->lock);
     
     if (i % 2 == 0) {
       pthread_create(&tid[i], NULL, read_thread, data);

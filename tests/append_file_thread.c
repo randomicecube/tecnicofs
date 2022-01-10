@@ -7,7 +7,7 @@
 
 #define GRN "\x1B[32m"
 #define RESET "\x1B[0m"
-#define NUM_THREADS 1723 // random number
+#define NUM_THREADS 173 // random number
 
 // struct that keeps the current iteration and file descriptor
 typedef struct {
@@ -23,12 +23,13 @@ void *write_thread(void *arg) {
   unlock_mutex(&data->lock);
   ssize_t r = tfs_write(fd, buffer, strlen(buffer));
   assert(tfs_close(fd) != -1);
+  printf("r = %ld\n", r);
   assert(r == strlen(buffer));
   return NULL;
 }
 
 int main() {
-  /*assert(tfs_init() != -1);
+  assert(tfs_init() != -1);
 
   char *path = "/f1";
   int fd = tfs_open(path, TFS_O_CREAT);
@@ -56,7 +57,7 @@ int main() {
 
   free(data);
 
-  assert(tfs_destroy() != -1); */
+  assert(tfs_destroy() != -1);
 
   printf(GRN "Successful test\n" RESET);
 
