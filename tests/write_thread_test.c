@@ -9,15 +9,15 @@
 #define RESET "\x1B[0m"
 #define NUM_THREADS 1723 // random number
 
-// struct that keeps the current iteration and file descriptor
 typedef struct {
   char *path;
     pthread_mutex_t lock;
 } thread_data;
 
+char *buffer = "Lorem ipsum, or lipsum as it is sometimes known, is dummy text used in laying out print, graphic or web designs. The passage is attributed to an unknown typesetter in the 15th century who is thought to have scrambled parts of Cicero's De Finibus Bonorum et Malorum for use in a type specimen book.";
+
 void *write_thread(void *arg) {
   thread_data *data = (thread_data *) arg;
-  char *buffer = "Lorem ipsum, or lipsum as it is sometimes known, is dummy text used in laying out print, graphic or web designs. The passage is attributed to an unknown typesetter in the 15th century who is thought to have scrambled parts of Cicero's De Finibus Bonorum et Malorum for use in a type specimen book.";
   lock_mutex(&data->lock);
   int fd = tfs_open(data->path, 0);
   assert(fd != -1);
@@ -58,6 +58,12 @@ int main() {
       exit(EXIT_FAILURE);
     }
   }
+
+  assert((fd = tfs_open(path, 0)) != -1);
+  char *aux_buf = malloc(BLOCK_SIZE); // BLOCK_SIZE works here, could be another
+  ssize_t bytes_read = tfs_read(fd, aux_buf, BLOCK_SIZE);
+  assert(bytes_read == strlen(buffer));
+  assert(tfs_close(fd) != -1);
 
   destroy_mutex(&data->lock);
 

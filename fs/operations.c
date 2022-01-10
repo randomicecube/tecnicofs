@@ -252,7 +252,7 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
 
     size_t bytes_read = 0;
 
-    size_t previously_read_blocks = initial_offset / BLOCK_SIZE; //is it offset or isize?
+    size_t previously_read_blocks = initial_offset / BLOCK_SIZE; 
     size_t end_read_blocks = (initial_offset + to_read) / BLOCK_SIZE;
     size_t current_read_size = BLOCK_SIZE;
     size_t buffer_offset = 0;
