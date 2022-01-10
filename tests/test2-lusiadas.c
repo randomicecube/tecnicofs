@@ -20,11 +20,19 @@ int main() {
     fseek(fp, 0, SEEK_SET);
     size_t delta = end - start;
     str = malloc(delta + 1);
+    if (str == NULL) {
+        perror("malloc error");
+        exit(EXIT_FAILURE);
+    }
     fread(str, 1, delta, fp);
     str[delta] = '\0';
     fclose(fp);
 
     buffer = malloc(delta + 1);
+    if (buffer == NULL) {
+        perror("malloc error");
+        exit(EXIT_FAILURE);
+    }
     memset(buffer, 0, delta + 1);
     
     int fd = tfs_open(path, TFS_O_CREAT);

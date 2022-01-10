@@ -20,6 +20,7 @@ void *write_thread(void *arg) {
   char *buffer = "Lorem ipsum, or lipsum as it is sometimes known, is dummy text used in laying out print, graphic or web designs. The passage is attributed to an unknown typesetter in the 15th century who is thought to have scrambled parts of Cicero's De Finibus Bonorum et Malorum for use in a type specimen book.";
   lock_mutex(&data->lock);
   int fd = tfs_open(data->path, 0);
+  assert(fd != -1);
   unlock_mutex(&data->lock);
   ssize_t r = tfs_write(fd, buffer, strlen(buffer));
   assert(tfs_close(fd) != -1);
@@ -45,11 +46,17 @@ int main() {
   
   pthread_t tid[NUM_THREADS];
   for (int i = 0; i < NUM_THREADS; i++) {
-    pthread_create(&tid[i], NULL, write_thread, data);
+    if (pthread_create(&tid[i], NULL, write_thread, data) != 0) {
+      perror("pthread_create error");
+      exit(EXIT_FAILURE);
+    }
   }
 
   for (int i = 0; i < NUM_THREADS; i++) {
-    pthread_join(tid[i], NULL);
+    if (pthread_join(tid[i], NULL) != 0) {
+      perror("pthread_join error");
+      exit(EXIT_FAILURE);
+    }
   }
 
   destroy_mutex(&data->lock);

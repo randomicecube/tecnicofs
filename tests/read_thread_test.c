@@ -19,6 +19,10 @@ typedef struct {
 void *read_thread(void *arg) {
   thread_data *data = (thread_data *) arg;
   char *buffer = malloc(data->bytes);
+  if (buffer == NULL) {
+    perror("malloc error");
+    exit(EXIT_FAILURE);
+  }
   int fd;
   lock_mutex(&data->lock);
   assert((fd = tfs_open(data->path, 0)) != -1);
@@ -57,11 +61,17 @@ int main() {
   
   pthread_t tid[NUM_THREADS];
   for (int i = 0; i < NUM_THREADS; i++) {
-    pthread_create(&tid[i], NULL, read_thread, data);
+    if (pthread_create(&tid[i], NULL, read_thread, data)) {
+      perror("pthread_create failed");
+      exit(EXIT_FAILURE);
+    }
   }
 
   for (int i = 0; i < NUM_THREADS; i++) {
-    pthread_join(tid[i], NULL);
+    if (pthread_join(tid[i], NULL)) {
+      perror("pthread_join failed");
+      exit(EXIT_FAILURE);
+    }
   }
 
   destroy_mutex(&data->lock);

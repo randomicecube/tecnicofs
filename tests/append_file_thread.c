@@ -45,11 +45,17 @@ int main() {
   
   pthread_t tid[NUM_THREADS];
   for (int i = 0; i < NUM_THREADS; i++) {
-    pthread_create(&tid[i], NULL, write_thread, data);
+    if (pthread_create(&tid[i], NULL, write_thread, data) != 0) {
+      perror("pthread_create error");
+      exit(EXIT_FAILURE);
+    }
   }
 
   for (int i = 0; i < NUM_THREADS; i++) {
-    pthread_join(tid[i], NULL);
+    if (pthread_join(tid[i], NULL)) {
+      perror("pthread_join error");
+      exit(EXIT_FAILURE);
+    }
   }
 
   destroy_mutex(&data->lock);

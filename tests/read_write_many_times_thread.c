@@ -70,7 +70,7 @@ int main() {
   data->path = path;
   init_mutex(&data->lock);
 
-  /* Section below tests writing and reading in parallel from/to the same file*/
+  /* Section below aims to test writing and reading in parallel to different files*/
   
   pthread_t tid[NUM_THREADS];
   for (int i = 0; i < NUM_THREADS; i++) {
@@ -78,9 +78,10 @@ int main() {
     lock_mutex(&data->lock);
     strcat(data->path, iteration);
     int fd = tfs_open(data->path, TFS_O_CREAT);
-    unlock_mutex(&data->lock);
     assert(fd != -1);
+    unlock_mutex(&data->lock);
   
+    // writing here ensures that a read will be able to occur in the thread call
     size_t bytes_written = (size_t) tfs_write(fd, str, strlen(str));
 
     assert(bytes_written == strlen(str));    
@@ -91,15 +92,24 @@ int main() {
     assert(tfs_close(fd) != -1);
     
     if (i % 2 == 0) {
-      pthread_create(&tid[i], NULL, read_thread, data);
+      if (pthread_create(&tid[i], NULL, read_thread, data) != 0) {
+        perror("pthread_create failed");
+        exit(EXIT_FAILURE);
+      }
     }
     else {
-      pthread_create(&tid[i], NULL, write_thread, data);
+      if (pthread_create(&tid[i], NULL, write_thread, data) != 0) {
+        perror("pthread_create failed");
+        exit(EXIT_FAILURE);
+      }
     }
   }
 
   for (int i = 0; i < NUM_THREADS; i++) {
-    pthread_join(tid[i], NULL);
+    if (pthread_join(tid[i], NULL) != 0) {
+      perror("pthread_join failed");
+      exit(EXIT_FAILURE);
+    }
   }
 
   destroy_mutex(&data->lock);

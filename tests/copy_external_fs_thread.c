@@ -38,11 +38,17 @@ int main() {
   pthread_t tid[NUM_THREADS];
 
   for (int i = 0; i < NUM_THREADS; i++) {
-    pthread_create(&tid[i], NULL, copy_external, path);
+    if (pthread_create(&tid[i], NULL, copy_external, path) != 0) {
+      perror("pthread_create error");
+      exit(EXIT_FAILURE);
+    }
   }
 
   for (int i = 0; i < NUM_THREADS; i++) {
-    pthread_join(tid[i], NULL);
+    if (pthread_join(tid[i], NULL) != 0) {
+      perror("pthread_join error");
+      exit(EXIT_FAILURE);
+    }
   }
 
   assert(tfs_close(fd) != -1);
