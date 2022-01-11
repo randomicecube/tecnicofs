@@ -41,13 +41,18 @@ typedef struct {
 
 #define MAX_DIR_ENTRIES (BLOCK_SIZE / sizeof(dir_entry_t))
 
-pthread_mutex_t *get_inode_table_lock(int inumber);
-pthread_mutex_t *get_open_file_table_lock(int file_handle);
+pthread_rwlock_t *get_inode_table_lock(int inumber);
+pthread_rwlock_t *get_open_file_table_lock(int file_handle);
 
 void lock_mutex(pthread_mutex_t *mutex);
+void read_lock_rwlock(pthread_rwlock_t *rwlock);
+void write_lock_rwlock(pthread_rwlock_t *rwlock);
 void unlock_mutex(pthread_mutex_t *mutex);
+void unlock_rwlock(pthread_rwlock_t *rwlock);
 void init_mutex(pthread_mutex_t *mutex);
+void init_rwlock(pthread_rwlock_t *rwlock);
 void destroy_mutex(pthread_mutex_t *mutex);
+void destroy_rwlock(pthread_rwlock_t *rwlock);
 
 void state_init();
 void state_destroy();
