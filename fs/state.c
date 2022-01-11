@@ -29,6 +29,10 @@ static pthread_mutex_t open_file_table_locks[MAX_OPEN_FILES];
 
 static pthread_mutex_t dir_entries_locks[MAX_DIR_ENTRIES];
 
+int open_files_count = 0;
+pthread_cond_t open_files_cond;
+pthread_mutex_t open_files_mutex;
+
 static inline bool valid_inumber(int inumber) {
     return inumber >= 0 && inumber < INODE_TABLE_SIZE;
 }
@@ -118,6 +122,7 @@ void destroy_mutex(pthread_mutex_t *mutex) {
  * Initializes FS state
  */
 void state_init() {
+    init_mutex(&open_files_mutex);
     for (size_t i = 0; i < INODE_TABLE_SIZE; i++) {
         freeinode_ts[i] = FREE;
         init_mutex(&inode_table_locks[i]);
@@ -408,10 +413,13 @@ int add_to_open_file_table(int inumber, size_t offset) {
     for (int i = 0; i < MAX_OPEN_FILES; i++) {
         lock_mutex(&open_file_table_locks[i]);
         if (free_open_file_entries[i] == FREE) {
+            lock_mutex(&open_files_mutex);
             free_open_file_entries[i] = TAKEN;
             unlock_mutex(&open_file_table_locks[i]);
             open_file_table[i].of_inumber = inumber;
             open_file_table[i].of_offset = offset;
+            open_files_count++;
+            unlock_mutex(&open_files_mutex);
             return i;
         }
         unlock_mutex(&open_file_table_locks[i]);
@@ -431,6 +439,12 @@ int remove_from_open_file_table(int fhandle) {
         unlock_mutex(&open_file_table_locks[fhandle]);
         return -1;
     }
+    lock_mutex(&open_files_mutex);
+    open_files_count--;
+    if (open_files_count == 0) {
+        pthread_cond_signal(&open_files_cond);
+    }
+    unlock_mutex(&open_files_mutex);
     free_open_file_entries[fhandle] = FREE;
     unlock_mutex(&open_file_table_locks[fhandle]);
     return 0;

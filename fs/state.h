@@ -68,4 +68,13 @@ int add_to_open_file_table(int inumber, size_t offset);
 int remove_from_open_file_table(int fhandle);
 open_file_entry_t *get_open_file_entry(int fhandle);
 
+/* Stores the number of currently open files - useful for the function
+ * tfs_destroy_after_all_closed() */
+extern int open_files_count;
+
+/* Condition variable and mutex for the tfs_destroy_after_all_closed()
+ * function - related to all files being closed (or not) */
+extern pthread_cond_t open_files_cond;
+extern pthread_mutex_t open_files_mutex;
+
 #endif // STATE_H

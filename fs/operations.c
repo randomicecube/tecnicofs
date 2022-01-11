@@ -353,3 +353,14 @@ int tfs_copy_to_external_fs(char const *source_path, char const *dest_path) {
     fclose(dest_file);
     return 0;
 }
+
+int tfs_destroy_after_all_closed() {
+    lock_mutex(&open_files_mutex);
+    while (open_files_count != 0) {
+        pthread_cond_wait(&open_files_cond, &open_files_mutex);
+    }
+    state_destroy();
+    unlock_mutex(&open_files_mutex);
+    destroy_mutex(&open_files_mutex);
+    return 0;
+}
