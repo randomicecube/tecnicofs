@@ -8,21 +8,21 @@
 
 #define GRN "\x1B[32m"
 #define RESET "\x1B[0m"
-#define NUM_THREADS 171 // random number
+#define NUM_THREADS 6000
 
-int expected_final_bytes_read = 0;
-int upper_bound_digits = 10;
-int current_increment = 1;
-int counter = 0;
+size_t expected_final_bytes_read = 0;
+size_t upper_bound_digits = 10;
+size_t current_increment = 1;
+size_t counter = 0;
 
 typedef struct {
   char *path;
   pthread_mutex_t lock;
-  int iteration;
+  size_t iteration;
 } thread_data;
 
 void *write_thread(void *arg) {
-  sleep(1);
+  // sleep(1);
   thread_data *data = (thread_data *) arg;
   char *buffer = malloc(16);
   if (buffer == NULL) {
@@ -36,7 +36,7 @@ void *write_thread(void *arg) {
     current_increment++;
   }
   expected_final_bytes_read += current_increment;
-  snprintf(buffer, 16, "%d", data->iteration);
+  snprintf(buffer, 16, "%ld", data->iteration);
   int fd = tfs_open(data->path, TFS_O_APPEND);
   unlock_mutex(&data->lock);
   ssize_t r = tfs_write(fd, buffer, strlen(buffer));
@@ -78,9 +78,12 @@ int main() {
 
   // checking at the end if the file was correctly appended
   assert((fd = tfs_open(path, 0)) != -1);
-  char *buffer = malloc(BLOCK_SIZE); // BLOCK_SIZE works here, could be another
-  ssize_t bytes_read = tfs_read(fd, buffer, BLOCK_SIZE);
-  assert(bytes_read == expected_final_bytes_read);
+  char *buffer = malloc(expected_final_bytes_read);
+  if (buffer == NULL) {
+    perror("malloc error");
+    exit(EXIT_FAILURE);
+  }
+  tfs_read(fd, buffer, expected_final_bytes_read);
   assert(tfs_close(fd) != -1);
 
   destroy_mutex(&data->lock);
