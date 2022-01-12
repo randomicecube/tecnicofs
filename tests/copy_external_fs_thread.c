@@ -7,7 +7,7 @@
 
 #define GRN "\x1B[32m"
 #define RESET "\x1B[0m"
-#define NUM_THREADS 379
+#define NUM_THREADS 200
 
 void *copy_external(void *arg) {
   char *path = (char *) arg;
