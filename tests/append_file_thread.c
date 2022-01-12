@@ -8,7 +8,7 @@
 
 #define GRN "\x1B[32m"
 #define RESET "\x1B[0m"
-#define NUM_THREADS 6000
+#define NUM_THREADS 200
 
 size_t expected_final_bytes_read = 0;
 size_t upper_bound_digits = 10;

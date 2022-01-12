@@ -8,7 +8,7 @@
 
 #define GRN "\x1B[32m"
 #define RESET "\x1B[0m"
-#define NUM_THREADS 1367 // random number
+#define NUM_THREADS 50
 
 typedef struct {
   char *path;
