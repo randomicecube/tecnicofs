@@ -32,6 +32,7 @@ static pthread_rwlock_t dir_entries_locks[MAX_DIR_ENTRIES];
 int open_files_count = 0;
 pthread_cond_t open_files_cond;
 pthread_mutex_t open_files_mutex;
+pthread_mutex_t open_file_lock;
 
 static inline bool valid_inumber(int inumber) {
     return inumber >= 0 && inumber < INODE_TABLE_SIZE;
@@ -168,6 +169,7 @@ void destroy_rwlock(pthread_rwlock_t *rwlock) {
  */
 void state_init() {
     init_mutex(&open_files_mutex);
+    init_mutex(&open_file_lock);
     for (size_t i = 0; i < INODE_TABLE_SIZE; i++) {
         freeinode_ts[i] = FREE;
         init_rwlock(&inode_table_locks[i]);
@@ -188,6 +190,7 @@ void state_init() {
 }
 
 void state_destroy() {
+    destroy_mutex(&open_file_lock);
     for (size_t i = 0; i < INODE_TABLE_SIZE; i++) {
         destroy_rwlock(&inode_table_locks[i]);
     }
