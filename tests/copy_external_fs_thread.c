@@ -23,13 +23,12 @@ int main() {
   // str to path
   int fd = tfs_open(path, TFS_O_CREAT);
   assert(fd != -1);
+  assert(tfs_close(fd) != -1);
 
   char *str = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.";
 
   ssize_t bytes_written = tfs_write(fd, str, strlen(str));
   assert(bytes_written == strlen(str));
-
-  assert(tfs_close(fd) != -1);
 
   // path to copy_external_fs
   fd = tfs_open(path, 0);

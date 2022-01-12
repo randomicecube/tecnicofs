@@ -24,7 +24,9 @@ int main() {
         perror("malloc error");
         exit(EXIT_FAILURE);
     }
-    fread(str, 1, delta, fp);
+    if (fread(str, 1, delta, fp) != delta) {
+        return -1;
+    }
     str[delta] = '\0';
     fclose(fp);
 

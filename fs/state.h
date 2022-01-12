@@ -81,5 +81,6 @@ extern int open_files_count;
  * function - related to all files being closed (or not) */
 extern pthread_cond_t open_files_cond;
 extern pthread_mutex_t open_files_mutex;
+extern pthread_mutex_t open_file_lock;
 
 #endif // STATE_H

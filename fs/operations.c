@@ -47,8 +47,10 @@ int tfs_open(char const *name, int flags) {
         return -1;
     }
 
+    lock_mutex(&open_file_lock); // prevents two files with the same name being created
     inum = tfs_lookup(name);
     if (inum >= 0) {
+        unlock_mutex(&open_file_lock);
         pthread_rwlock_t *inode_lock = get_inode_table_lock(inum);
         /* The file already exists */
         inode_t *inode = inode_get(inum);
@@ -89,6 +91,7 @@ int tfs_open(char const *name, int flags) {
             offset = 0;
         }
     } else if (flags & TFS_O_CREAT) {
+        unlock_mutex(&open_file_lock);
         /* The file doesn't exist; the flags specify that it should be created */
         inum = inode_create(T_FILE);
         if (inum == -1) {
@@ -101,6 +104,7 @@ int tfs_open(char const *name, int flags) {
         }
         offset = 0;
     } else {
+        unlock_mutex(&open_file_lock);
         return -1;
     }
 
