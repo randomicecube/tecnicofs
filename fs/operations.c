@@ -182,22 +182,25 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
                     read_lock_rwlock(inode_lock);
                 }
                 int indirect_data_block_num = inode->i_indirect_data_block;
-                unlock_rwlock(inode_lock);
                 int *indirect_block = (int *) data_block_get(indirect_data_block_num);
                 if (indirect_block == NULL) {
+                    unlock_rwlock(inode_lock);
                     return -1;
                 }
 
                 if (indirect_block[i-MAX_DIRECT_BLOCKS] == -1) {
                     indirect_block[i-MAX_DIRECT_BLOCKS] = data_block_alloc();
                     if (indirect_block[i-MAX_DIRECT_BLOCKS] == -1) {
+                        unlock_rwlock(inode_lock);
                         return -1;
                     }
                 }
                 block = data_block_get(indirect_block[i-MAX_DIRECT_BLOCKS]);
                 if (block == NULL) {
+                    unlock_rwlock(inode_lock);
                     return -1;
                 }
+                unlock_rwlock(inode_lock);
             }
             memcpy(block + initial_offset % BLOCK_SIZE, buffer + buffer_offset, current_write_size);
             bytes_written += current_write_size;

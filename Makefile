@@ -42,6 +42,7 @@ CFLAGS += $(INCLUDES)
 CFLAGS += -fdiagnostics-color=always -Wall -Werror -Wextra -Wcast-align -Wconversion -Wfloat-equal -Wformat=2 -Wnull-dereference -Wshadow -Wsign-conversion -Wswitch-default -Wswitch-enum -Wundef -Wunreachable-code -Wunused
 # Warning suppressions
 CFLAGS += -Wno-sign-compare
+CLFAGS += -pthread
 
 # Sanitizers
 CFLAGS += -fsanitize=thread
@@ -59,7 +60,7 @@ else
 endif
 
 # Linker flags
-LDFLAGS = -lpthread
+LDFLAGS = -pthread
 LDFLAGS += -fsanitize=thread
 
 # A phony target is one that is not really the name of a file

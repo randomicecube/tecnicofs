@@ -402,11 +402,11 @@ int find_in_dir(int inumber, char const *sub_name) {
  */
 int data_block_alloc() {
     for (int i = 0; i < DATA_BLOCKS; i++) {
+        write_lock_rwlock(&data_blocks_locks[i]);
         if (i * (int) sizeof(allocation_state_t) % BLOCK_SIZE == 0) {
             insert_delay(); // simulate storage access delay to free_blocks
         }
 
-        write_lock_rwlock(&data_blocks_locks[i]);
         if (free_blocks[i] == FREE) {
             free_blocks[i] = TAKEN;
             unlock_rwlock(&data_blocks_locks[i]);
