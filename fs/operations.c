@@ -142,10 +142,9 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
 
     if (to_write > 0) {
         read_lock_rwlock(file_lock);
-        size_t initial_offset = file->of_offset;
+        size_t previously_written_blocks = file->of_offset / BLOCK_SIZE;
+        size_t end_write_blocks = (file->of_offset + to_write) / BLOCK_SIZE;
         unlock_rwlock(file_lock);
-        size_t previously_written_blocks = initial_offset / BLOCK_SIZE;
-        size_t end_write_blocks = (initial_offset + to_write) / BLOCK_SIZE;    
         size_t current_write_size = BLOCK_SIZE;
         size_t buffer_offset = 0;
         if (to_write % BLOCK_SIZE > 0) {
@@ -206,24 +205,24 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
                 }
                 unlock_rwlock(inode_lock);
             }
-            memcpy(block + initial_offset % BLOCK_SIZE, buffer + buffer_offset, current_write_size);
+            read_lock_rwlock(file_lock);
+            memcpy(block + file->of_offset % BLOCK_SIZE, buffer + buffer_offset, current_write_size);
+            unlock_rwlock(file_lock);
             bytes_written += current_write_size;
             buffer_offset += current_write_size;
-            initial_offset += current_write_size;
+            write_lock_rwlock(file_lock);
+            file->of_offset += current_write_size;
             write_lock_rwlock(inode_lock);
-            if (initial_offset > inode->i_size) {
-                inode->i_size = initial_offset;
+            if (file->of_offset > inode->i_size) {
+                inode->i_size = file->of_offset;
             }
             unlock_rwlock(inode_lock);
+            unlock_rwlock(file_lock);
             if ((int) to_write - BLOCK_SIZE <= 0) {
                 break;
             }
         }
     }
-
-    write_lock_rwlock(file_lock);
-    file->of_offset += bytes_written;
-    unlock_rwlock(file_lock);
 
     return (ssize_t) bytes_written;
 }
@@ -239,7 +238,6 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
     /* From the open file table entry, we get the inode */
     read_lock_rwlock(file_lock);
     int inum = file->of_inumber;
-    size_t initial_offset = file->of_offset;
     unlock_rwlock(file_lock);
     inode_t *inode = inode_get(inum);
     if (inode == NULL) {
@@ -250,7 +248,9 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
 
     /* Determine how many bytes to read */
     read_lock_rwlock(inode_lock);
-    size_t to_read = inode->i_size - initial_offset;
+    read_lock_rwlock(file_lock);
+    size_t to_read = inode->i_size - file->of_offset;
+    unlock_rwlock(file_lock);
     unlock_rwlock(inode_lock);
     if (to_read > len) {
         to_read = len;
@@ -262,8 +262,10 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
 
     size_t bytes_read = 0;
 
-    size_t previously_read_blocks = initial_offset / BLOCK_SIZE; 
-    size_t end_read_blocks = (initial_offset + to_read) / BLOCK_SIZE;
+    read_lock_rwlock(file_lock);
+    size_t previously_read_blocks = file->of_offset / BLOCK_SIZE; 
+    size_t end_read_blocks = (file->of_offset + to_read) / BLOCK_SIZE;
+    unlock_rwlock(file_lock);
     size_t current_read_size = BLOCK_SIZE;
     size_t buffer_offset = 0;
     if (to_read % BLOCK_SIZE > 0) {
@@ -294,18 +296,18 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
                 return -1;
             }
         }
-        memcpy(buffer + buffer_offset, block + initial_offset % BLOCK_SIZE, current_read_size);
+        read_lock_rwlock(file_lock);
+        memcpy(buffer + buffer_offset, block + file->of_offset % BLOCK_SIZE, current_read_size);
+        unlock_rwlock(file_lock);
         bytes_read += current_read_size;
-        initial_offset += current_read_size;
+        write_lock_rwlock(file_lock);
+        file->of_offset += current_read_size;
+        unlock_rwlock(file_lock);
         buffer_offset += current_read_size;
         if ((int) to_read - BLOCK_SIZE <= 0) {
             break;
         }
     }
-
-    write_lock_rwlock(file_lock);
-    file->of_offset += bytes_read;
-    unlock_rwlock(file_lock);
 
     return (ssize_t) bytes_read;
 }
