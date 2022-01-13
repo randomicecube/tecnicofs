@@ -22,7 +22,7 @@ typedef struct {
 } thread_data;
 
 void *write_thread(void *arg) {
-  // sleep(1);
+  sleep(1);
   thread_data *data = (thread_data *) arg;
   char *buffer = malloc(16);
   if (buffer == NULL) {
@@ -92,7 +92,7 @@ int main() {
 
   assert(tfs_destroy() != -1);
 
-  printf(GRN "Successful test\n" RESET);
+  printf(GRN "Successful test.\n" RESET);
 
   exit(EXIT_SUCCESS);
 }

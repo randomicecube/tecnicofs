@@ -15,6 +15,7 @@ char *buffer = "Lorem ipsum, or lipsum as it is sometimes known, is dummy text u
 char *path = "/f1";
 
 void *write_thread() {
+  sleep(1);
   int fd = tfs_open(path, TFS_O_TRUNC);
   assert(fd != -1);
   ssize_t r = tfs_write(fd, buffer, strlen(buffer));
@@ -53,7 +54,7 @@ int main() {
 
   assert(tfs_destroy() != -1);
 
-  printf(GRN "Successful test\n" RESET);
+  printf(GRN "Successful test.\n" RESET);
 
   exit(EXIT_SUCCESS);
 }

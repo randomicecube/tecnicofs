@@ -16,12 +16,12 @@ HEADERS  := $(wildcard */*.h)
 OBJECTS  := $(SOURCES:.c=.o)
 TARGET_EXECS := tests/test1
 TARGET_EXECS += tests/test2-lusiadas
+TARGET_EXECS += tests/teste3
 TARGET_EXECS += tests/copy_to_external_errors
 TARGET_EXECS += tests/copy_to_external_simple
 TARGET_EXECS += tests/write_10_blocks_simple
 TARGET_EXECS += tests/write_10_blocks_spill
 TARGET_EXECS += tests/write_more_than_10_blocks_simple
-TARGET_EXECS += tests/teste3
 TARGET_EXECS += tests/write_thread_test
 TARGET_EXECS += tests/read_thread_test
 TARGET_EXECS += tests/read_and_write_thread_test
@@ -61,7 +61,7 @@ LDFLAGS = -pthread
 
 # A phony target is one that is not really the name of a file
 # https://www.gnu.org/software/make/manual/html_node/Phony-Targets.html
-.PHONY: all clean depend fmt
+.PHONY: all clean depend fmt run
 
 all: $(TARGET_EXECS)
 
@@ -97,6 +97,11 @@ tests/copy_external_fs_thread: tests/copy_external_fs_thread.o fs/operations.o f
 tests/read_write_many_times_thread: tests/read_write_many_times_thread.o fs/operations.o fs/state.o
 tests/append_file_thread: tests/append_file_thread.o fs/operations.o fs/state.o
 tests/trunc_file_thread: tests/trunc_file_thread.o fs/operations.o fs/state.o
+
+# Runs all the tests
+run: $(TARGET_EXECS)
+	for test in $(TARGET_EXECS); do $$test; done
+
 
 clean:
 	rm -f $(OBJECTS) $(TARGET_EXECS)

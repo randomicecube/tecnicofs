@@ -80,7 +80,7 @@ int main() {
 
   assert(tfs_destroy() != -1);
 
-  printf(GRN "Successful test\n" RESET);
+  printf(GRN "Successful test.\n" RESET);
 
   exit(EXIT_SUCCESS);
 }

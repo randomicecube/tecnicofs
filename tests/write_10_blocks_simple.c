@@ -49,7 +49,7 @@ int main() {
     assert(tfs_close(fd) != -1);
 
 
-    printf(GRN "Sucessful test\n" RESET);
+    printf(GRN "Successful test.\n" RESET);
 
     return 0;
 }
