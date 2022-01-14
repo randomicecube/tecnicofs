@@ -428,12 +428,13 @@ int data_block_alloc() {
  * Returns: 0 if success, -1 otherwise
  */
 int data_block_free(int block_number) {
+    write_lock_rwlock(&data_blocks_locks[block_number]);
     if (!valid_block_number(block_number)) {
+        unlock_rwlock(&data_blocks_locks[block_number]);
         return -1;
     }
 
     insert_delay(); // simulate storage access delay to free_blocks
-    write_lock_rwlock(&data_blocks_locks[block_number]);
     free_blocks[block_number] = FREE;
     unlock_rwlock(&data_blocks_locks[block_number]);
     return 0;
@@ -465,10 +466,10 @@ int add_to_open_file_table(int inumber, size_t offset) {
         if (free_open_file_entries[i] == FREE) {
             lock_mutex(&open_files_mutex);
             free_open_file_entries[i] = TAKEN;
-            unlock_rwlock(&open_file_table_locks[i]);
             open_file_table[i].of_inumber = inumber;
             open_file_table[i].of_offset = offset;
             open_files_count++;
+            unlock_rwlock(&open_file_table_locks[i]);
             unlock_mutex(&open_files_mutex);
             return i;
         }
@@ -494,8 +495,8 @@ int remove_from_open_file_table(int fhandle) {
     if (open_files_count == 0) {
         pthread_cond_signal(&open_files_cond);
     }
-    unlock_mutex(&open_files_mutex);
     free_open_file_entries[fhandle] = FREE;
+    unlock_mutex(&open_files_mutex);
     unlock_rwlock(&open_file_table_locks[fhandle]);
     return 0;
 }
