@@ -416,6 +416,8 @@ int data_block_alloc() {
             return i;
         }
         unlock_rwlock(&data_blocks_locks[i]);
+        if (i > 1012) {
+}
     }
     return -1;
 }

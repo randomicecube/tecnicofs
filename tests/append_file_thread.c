@@ -15,8 +15,9 @@ size_t upper_bound_digits = 10;
 size_t current_increment = 1;
 size_t counter = 0;
 
+char *path = "/f1";
+
 typedef struct {
-  char *path;
   pthread_mutex_t lock;
   size_t iteration;
 } thread_data;
@@ -37,8 +38,8 @@ void *write_thread(void *arg) {
   }
   expected_final_bytes_read += current_increment;
   snprintf(buffer, 16, "%ld", data->iteration);
-  int fd = tfs_open(data->path, TFS_O_APPEND);
   unlock_mutex(&data->lock);
+  int fd = tfs_open(path, TFS_O_APPEND);
   ssize_t r = tfs_write(fd, buffer, strlen(buffer));
   assert(tfs_close(fd) != -1);
   assert(r == strlen(buffer));
@@ -48,7 +49,6 @@ void *write_thread(void *arg) {
 int main() {
   assert(tfs_init() != -1);
 
-  char *path = "/f1";
   int fd = tfs_open(path, TFS_O_CREAT);
   assert(fd != -1);
   assert(tfs_close(fd) != -1);
@@ -58,7 +58,6 @@ int main() {
     perror("malloc error");
     exit(EXIT_FAILURE);
   }
-  data->path = path;
   init_mutex(&data->lock);
   
   pthread_t tid[NUM_THREADS];

@@ -60,13 +60,14 @@ int tfs_open(char const *name, int flags) {
 
         /* Trucate (if requested) */
         if (flags & TFS_O_TRUNC) {
-            read_lock_rwlock(inode_lock);
+            write_lock_rwlock(inode_lock);
             if (inode->i_size > 0) {
                 size_t written_blocks = inode->i_size / BLOCK_SIZE;
                 if (written_blocks % BLOCK_SIZE != 0) {
                     written_blocks++;
                 }
-                for (int i = 0; i < written_blocks; i++) {
+                size_t loop_limit = (written_blocks <= 10) ? written_blocks : 10;
+                for (int i = 0; i < loop_limit; i++) {
                     if (data_block_free(inode->i_data_block[i]) == -1) {
                         unlock_rwlock(inode_lock);
                         return -1;
@@ -76,8 +77,6 @@ int tfs_open(char const *name, int flags) {
                     unlock_rwlock(inode_lock);
                     return -1;
                 }
-                unlock_rwlock(inode_lock);
-                write_lock_rwlock(inode_lock);
                 inode->i_size = 0;
             }
             unlock_rwlock(inode_lock);
@@ -145,49 +144,51 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
         size_t previously_written_blocks = file->of_offset / BLOCK_SIZE;
         size_t end_write_blocks = (file->of_offset + to_write) / BLOCK_SIZE;
         unlock_rwlock(file_lock);
-        size_t current_write_size = BLOCK_SIZE;
         size_t buffer_offset = 0;
         if (to_write % BLOCK_SIZE > 0) {
             end_write_blocks++;
         }
+
+        write_lock_rwlock(inode_lock);
+        write_lock_rwlock(file_lock);
         
-        for (size_t i = previously_written_blocks; i < previously_written_blocks + end_write_blocks; i++, to_write -= BLOCK_SIZE) {
-            current_write_size = (to_write > BLOCK_SIZE ? BLOCK_SIZE : to_write);
+        for (size_t i = previously_written_blocks; i < end_write_blocks; i++) {
             void *block;
             if (i < MAX_DIRECT_BLOCKS) {
-                write_lock_rwlock(inode_lock);
                 if (inode->i_data_block[i] == -1) {
                     inode->i_data_block[i] = data_block_alloc();
                     if (inode->i_data_block[i] == -1) {
                         unlock_rwlock(inode_lock);
+                        unlock_rwlock(file_lock);
                         return -1;
                     }
                 }
                 block = data_block_get(inode->i_data_block[i]);
                 if (block == NULL) {
                     unlock_rwlock(inode_lock);
+                    unlock_rwlock(file_lock);
                     return -1;
                 }
-                unlock_rwlock(inode_lock);
             } else {
-                write_lock_rwlock(inode_lock);
+                int indirect_block_num;
                 if (inode->i_indirect_data_block == -1) {
                     inode->i_indirect_data_block = data_block_alloc();
-                    int indirect_block_num = inode->i_indirect_data_block;
-                    unlock_rwlock(inode_lock);
+                    indirect_block_num = inode->i_indirect_data_block;
                     int *indirect_block = data_block_get(indirect_block_num);
                     if (indirect_block == NULL) {
+                        unlock_rwlock(inode_lock);
+                        unlock_rwlock(file_lock);
                         return -1;
                     }
                     for (int j = MAX_DIRECT_BLOCKS; j < BLOCK_SIZE; j++) {
                         indirect_block[j-MAX_DIRECT_BLOCKS] = -1; // they start at -1, allocated if needed
                     }
-                    read_lock_rwlock(inode_lock);
                 }
-                int indirect_data_block_num = inode->i_indirect_data_block;
-                int *indirect_block = (int *) data_block_get(indirect_data_block_num);
+                indirect_block_num = inode->i_indirect_data_block;
+                int *indirect_block = (int *) data_block_get(indirect_block_num);
                 if (indirect_block == NULL) {
                     unlock_rwlock(inode_lock);
+                    unlock_rwlock(file_lock);
                     return -1;
                 }
 
@@ -195,33 +196,51 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
                     indirect_block[i-MAX_DIRECT_BLOCKS] = data_block_alloc();
                     if (indirect_block[i-MAX_DIRECT_BLOCKS] == -1) {
                         unlock_rwlock(inode_lock);
+                        unlock_rwlock(file_lock);
                         return -1;
                     }
                 }
                 block = data_block_get(indirect_block[i-MAX_DIRECT_BLOCKS]);
                 if (block == NULL) {
                     unlock_rwlock(inode_lock);
+                    unlock_rwlock(file_lock);
                     return -1;
                 }
-                unlock_rwlock(inode_lock);
             }
-            read_lock_rwlock(file_lock);
-            memcpy(block + file->of_offset % BLOCK_SIZE, buffer + buffer_offset, current_write_size);
-            unlock_rwlock(file_lock);
-            bytes_written += current_write_size;
-            buffer_offset += current_write_size;
-            write_lock_rwlock(file_lock);
-            file->of_offset += current_write_size;
-            write_lock_rwlock(inode_lock);
+            if (i + 1 < end_write_blocks && to_write > BLOCK_SIZE - (file->of_offset % BLOCK_SIZE)) {
+                // we continue writing for one more block
+                size_t to_write_in_block = BLOCK_SIZE - (file->of_offset % BLOCK_SIZE);
+                memcpy(block + file->of_offset % BLOCK_SIZE, buffer + buffer_offset, to_write_in_block);
+                bytes_written += to_write_in_block;
+                buffer_offset += to_write_in_block;
+                file->of_offset += to_write_in_block;
+                to_write -= to_write_in_block;
+            } else if (to_write <= BLOCK_SIZE) {
+                // last write
+                memcpy(block + file->of_offset % BLOCK_SIZE, buffer + buffer_offset, to_write);
+                bytes_written += to_write;
+                buffer_offset += to_write;
+                file->of_offset += to_write;
+                to_write -= to_write;
+                if (file->of_offset > inode->i_size) {
+                    inode->i_size = file->of_offset;
+                }
+                break;
+            } else {
+                // we write the whole block and still continue
+                memcpy(block + file->of_offset % BLOCK_SIZE, buffer + buffer_offset, BLOCK_SIZE);
+                bytes_written += BLOCK_SIZE;
+                buffer_offset += BLOCK_SIZE;
+                file->of_offset += BLOCK_SIZE;
+                to_write -= BLOCK_SIZE;
+            }
+
             if (file->of_offset > inode->i_size) {
                 inode->i_size = file->of_offset;
             }
-            unlock_rwlock(inode_lock);
-            unlock_rwlock(file_lock);
-            if ((int) to_write - BLOCK_SIZE <= 0) {
-                break;
-            }
         }
+        unlock_rwlock(inode_lock);
+        unlock_rwlock(file_lock);
     }
 
     return (ssize_t) bytes_written;
@@ -266,48 +285,69 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
     size_t previously_read_blocks = file->of_offset / BLOCK_SIZE; 
     size_t end_read_blocks = (file->of_offset + to_read) / BLOCK_SIZE;
     unlock_rwlock(file_lock);
-    size_t current_read_size = BLOCK_SIZE;
     size_t buffer_offset = 0;
     if (to_read % BLOCK_SIZE > 0) {
         end_read_blocks++;
     }
 
-    for (size_t i = previously_read_blocks; i < end_read_blocks; i++, to_read -= BLOCK_SIZE) {
-        current_read_size = (to_read > BLOCK_SIZE) ? BLOCK_SIZE : to_read;
+    write_lock_rwlock(inode_lock);
+    write_lock_rwlock(file_lock);
+
+    for (size_t i = previously_read_blocks; i < end_read_blocks; i++) {
         void *block;
         if (i < MAX_DIRECT_BLOCKS) {
-            read_lock_rwlock(inode_lock);
             int data_block_num = inode->i_data_block[i];
-            unlock_rwlock(inode_lock);
             block = data_block_get(data_block_num);
             if (block == NULL) {
+                unlock_rwlock(inode_lock);
+                unlock_rwlock(file_lock);
                 return -1;
             }
         } else {
-            read_lock_rwlock(inode_lock);
             int indirect_data_block_num = inode->i_indirect_data_block;
-            unlock_rwlock(inode_lock);
             int *indirect_block = (int *) data_block_get(indirect_data_block_num);
             if (indirect_block == NULL) {
+                unlock_rwlock(inode_lock);
+                unlock_rwlock(file_lock);
                 return -1;
             }
             block = data_block_get(indirect_block[i-MAX_DIRECT_BLOCKS]);
             if (block == NULL) {
+                unlock_rwlock(inode_lock);
+                unlock_rwlock(file_lock);
                 return -1;
             }
         }
-        read_lock_rwlock(file_lock);
-        memcpy(buffer + buffer_offset, block + file->of_offset % BLOCK_SIZE, current_read_size);
-        unlock_rwlock(file_lock);
-        bytes_read += current_read_size;
-        write_lock_rwlock(file_lock);
-        file->of_offset += current_read_size;
-        unlock_rwlock(file_lock);
-        buffer_offset += current_read_size;
-        if ((int) to_read - BLOCK_SIZE <= 0) {
+
+
+        if (i + 1 < end_read_blocks && to_read > BLOCK_SIZE - (file->of_offset % BLOCK_SIZE)) {
+            // we continue reading for one more block
+            size_t to_read_in_block = BLOCK_SIZE - (file->of_offset % BLOCK_SIZE);
+            memcpy(buffer + buffer_offset, block + file->of_offset % BLOCK_SIZE, to_read_in_block);
+            bytes_read += to_read_in_block;
+            buffer_offset += to_read_in_block;
+            file->of_offset += to_read_in_block;
+            to_read -= to_read_in_block;
+        } else if (to_read <= BLOCK_SIZE) {
+            // last read
+            memcpy(buffer + buffer_offset, block + file->of_offset % BLOCK_SIZE, to_read);
+            bytes_read += to_read;
+            buffer_offset += to_read;
+            file->of_offset += to_read;
+            to_read -= to_read;
             break;
+        } else {
+            // we read the whole block and still continue
+            memcpy(buffer + buffer_offset, block + file->of_offset % BLOCK_SIZE, BLOCK_SIZE);
+            bytes_read += BLOCK_SIZE;
+            buffer_offset += BLOCK_SIZE;
+            file->of_offset += BLOCK_SIZE;
+            to_read -= BLOCK_SIZE;
         }
     }
+
+    unlock_rwlock(inode_lock);
+    unlock_rwlock(file_lock);
 
     return (ssize_t) bytes_read;
 }
@@ -323,11 +363,7 @@ int tfs_copy_to_external_fs(char const *source_path, char const *dest_path) {
         return -1;
     }
 
-    pthread_rwlock_t *source_file_lock = get_open_file_table_lock(source_handle);
-
-    read_lock_rwlock(source_file_lock);
     int source_inum = source_file->of_inumber;
-    unlock_rwlock(source_file_lock);
     inode_t *source_inode = inode_get(source_inum);
     if (source_inode == NULL) {
         return -1;

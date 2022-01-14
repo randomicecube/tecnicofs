@@ -13,7 +13,7 @@ int main() {
 
     assert(tfs_init() != -1);
 
-    FILE *fp = fopen("lusiadas.txt", "r");
+    FILE *fp = fopen("tests/lusiadas.txt", "r");
     size_t start = (size_t) ftell(fp);
     fseek(fp, 0, SEEK_END);
     size_t end = (size_t) ftell(fp);

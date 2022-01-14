@@ -10,8 +10,9 @@
 #define RESET "\x1B[0m"
 #define NUM_THREADS 20
 
+char *path = "/f1";
+
 typedef struct {
-  char *path;
   size_t bytes;
   pthread_mutex_t lock;
 } thread_data;
@@ -19,19 +20,18 @@ typedef struct {
 void *read_thread(void *arg) {
   sleep(1);
   thread_data *data = (thread_data *) arg;
-  char *buffer = malloc(data->bytes);
+  lock_mutex(&data->lock);
+  size_t bytes = data->bytes;
+  unlock_mutex(&data->lock);
+  char *buffer = malloc(bytes);
   if (buffer == NULL) {
     perror("malloc error");
     exit(EXIT_FAILURE);
   }
   int fd;
-  lock_mutex(&data->lock);
-  assert((fd = tfs_open(data->path, 0)) != -1);
-  unlock_mutex(&data->lock);
-  ssize_t bytes_read = tfs_read(fd, buffer, data->bytes);
-  lock_mutex(&data->lock);
-  assert(bytes_read == data->bytes);
-  unlock_mutex(&data->lock);
+  assert((fd = tfs_open(path, 0)) != -1);
+  ssize_t bytes_read = tfs_read(fd, buffer, bytes);
+  assert(bytes_read == bytes);
   assert(tfs_close(fd) != -1);
   free(buffer);
   return NULL;
@@ -40,7 +40,6 @@ void *read_thread(void *arg) {
 int main() {
   assert(tfs_init() != -1);
 
-  char *path = "/f1";
   char *str = "cc -std=c11 -D_POSIX_C_SOURCE=200809L -Ifs -I. -fdiagnostics-color=always -Wall -Werror -Wextra -Wcast-align -Wconversion -Wfloat-equal -Wformat=2 -Wnull-dereference -Wshadow -Wsign-conversion -Wswitch-default -Wswitch-enum -Wundef -Wunreachable-code -Wunused -Wno-sign-compare -fsanitize=thread -g -O3   -c -o tests/read_write_many_times_thread.o tests/read_write_many_times_thread.c cc -lpthread -fsanitize=thread  tests/read_write_many_times_thread.o fs/operations.o fs/state.o   -o tests/read_write_many_times_thread";
 
   int fd = tfs_open(path, TFS_O_CREAT);
@@ -56,7 +55,6 @@ int main() {
     perror("malloc failed");
     exit(EXIT_FAILURE);
   }
-  data->path = path;
   data->bytes = (size_t) bytes_written;
   init_mutex(&data->lock);
   

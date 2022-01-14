@@ -7,11 +7,12 @@
 #include <unistd.h>
 
 #define GRN "\x1B[32m"
+#define RED "\x1B[31m"
 #define RESET "\x1B[0m"
-#define NUM_THREADS 19
+#define NUM_THREADS 4000
 
 void *copy_external(void *arg) {
-  sleep(1);
+  // sleep(1);
   char *path = (char *) arg;
   assert(tfs_copy_to_external_fs(path, "test_copy_to_external_fs.out") == 0);
   return NULL;
@@ -48,6 +49,19 @@ int main() {
   }
 
   assert(tfs_close(fd) != -1);
+
+  FILE *fp = fopen("test_copy_to_external_fs.out", "r");
+  assert(fp != NULL);
+  // check if fp content is equal to str
+  char *buf = (char *) malloc(sizeof(char) * strlen(str));
+  assert(buf != NULL);
+  fread(buf, sizeof(char), strlen(str), fp);
+  if (strcmp(buf, str) != 0) {
+    printf("%s%s%s", RED, "Test failed\n", RESET);
+    printf("buf is %s\n", buf);
+    printf("str is %s\n", str);
+    exit(EXIT_FAILURE);
+  }
 
   assert(tfs_destroy() != -1);
 

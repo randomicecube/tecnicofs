@@ -21,9 +21,15 @@ void *write_thread(void *arg) {
   sleep(1);
   thread_data *data = (thread_data *) arg;
   lock_mutex(&data->lock);
-  int fd = tfs_open(data->path, 0);
-  assert(fd != -1);
+  char *new_path = malloc(strlen(data->path) + 1);
+  if (new_path == NULL) {
+    perror("malloc error");
+    exit(EXIT_FAILURE);
+  }
+  strcpy(new_path, data->path);
   unlock_mutex(&data->lock);
+  int fd = tfs_open(new_path, 0);
+  assert(fd != -1);
   ssize_t r = tfs_write(fd, buffer, strlen(buffer));
   assert(tfs_close(fd) != -1);
   assert(r == strlen(buffer));
