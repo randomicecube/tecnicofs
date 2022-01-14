@@ -1,4 +1,4 @@
-./so-tests
+so-tests/*
 **/*.o
 *.out
 tests/*
