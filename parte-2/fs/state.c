@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <pthread.h>
 
 /* Persistent FS state  (in reality, it should be maintained in secondary
  * memory; for simplicity, this project maintains it in primary memory) */
@@ -21,6 +22,10 @@ static char free_blocks[DATA_BLOCKS];
 
 static open_file_entry_t open_file_table[MAX_OPEN_FILES];
 static char free_open_file_entries[MAX_OPEN_FILES];
+
+int open_files_count = 0;
+pthread_cond_t open_files_cond;
+pthread_mutex_t open_files_mutex;
 
 static inline bool valid_inumber(int inumber) {
     return inumber >= 0 && inumber < INODE_TABLE_SIZE;
@@ -62,9 +67,46 @@ static void insert_delay() {
 }
 
 /*
+ * Locks (and checks for errors) a given mutex
+ */
+void lock_mutex(pthread_mutex_t *mutex) {
+    if(pthread_mutex_lock(mutex) != 0) {
+        exit(EXIT_FAILURE);
+    }
+}
+
+/*
+ * Unlocks (and checks for errors) a given mutex
+ */
+void unlock_mutex(pthread_mutex_t *mutex) {
+    if(pthread_mutex_unlock(mutex) != 0) {
+        exit(EXIT_FAILURE);
+    }
+}
+
+/*
+ * Initializes (and checks for errors) a given mutex
+ */
+void init_mutex(pthread_mutex_t *mutex) {
+    if(pthread_mutex_init(mutex, NULL) != 0) {
+        exit(EXIT_FAILURE);
+    }
+}
+
+/*
+ * Destroys (and checks for errors) a given mutex
+ */
+void destroy_mutex(pthread_mutex_t *mutex) {
+    if(pthread_mutex_destroy(mutex) != 0) {
+        exit(EXIT_FAILURE);
+    }
+}
+
+/*
  * Initializes FS state
  */
 void state_init() {
+    init_mutex(&open_files_mutex);
     for (size_t i = 0; i < INODE_TABLE_SIZE; i++) {
         freeinode_ts[i] = FREE;
     }
@@ -303,9 +345,12 @@ void *data_block_get(int block_number) {
 int add_to_open_file_table(int inumber, size_t offset) {
     for (int i = 0; i < MAX_OPEN_FILES; i++) {
         if (free_open_file_entries[i] == FREE) {
+            lock_mutex(&open_files_mutex);
             free_open_file_entries[i] = TAKEN;
             open_file_table[i].of_inumber = inumber;
             open_file_table[i].of_offset = offset;
+            open_files_count++;
+            unlock_mutex(&open_files_mutex);
             return i;
         }
     }
@@ -322,7 +367,13 @@ int remove_from_open_file_table(int fhandle) {
         free_open_file_entries[fhandle] != TAKEN) {
         return -1;
     }
+    lock_mutex(&open_files_mutex);
+    open_files_count--;
+    if (open_files_count == 0) {
+        pthread_cond_signal(&open_files_cond);
+    }
     free_open_file_entries[fhandle] = FREE;
+    unlock_mutex(&open_files_mutex);
     return 0;
 }
 

@@ -35,7 +35,13 @@ static bool valid_pathname(char const *name) {
 }
 
 int tfs_destroy_after_all_closed() {
-    /* TO DO: implement this */
+    lock_mutex(&open_files_mutex);
+    while (open_files_count != 0) {
+        pthread_cond_wait(&open_files_cond, &open_files_mutex);
+    }
+    state_destroy();
+    unlock_mutex(&open_files_mutex);
+    destroy_mutex(&open_files_mutex);
     return 0;
 }
 
