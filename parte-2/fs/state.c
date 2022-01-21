@@ -24,6 +24,7 @@ static open_file_entry_t open_file_table[MAX_OPEN_FILES];
 static char free_open_file_entries[MAX_OPEN_FILES];
 
 int open_files_count = 0;
+int open_flag = 0;
 pthread_cond_t open_files_cond;
 pthread_mutex_t open_files_mutex;
 
@@ -107,6 +108,9 @@ void destroy_mutex(pthread_mutex_t *mutex) {
  */
 void state_init() {
     init_mutex(&open_files_mutex);
+		lock_mutex(&open_files_mutex);
+		open_flag = 1;
+		unlock_mutex(&open_files_mutex);
     for (size_t i = 0; i < INODE_TABLE_SIZE; i++) {
         freeinode_ts[i] = FREE;
     }

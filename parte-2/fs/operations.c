@@ -39,6 +39,7 @@ int tfs_destroy_after_all_closed() {
     while (open_files_count != 0) {
         pthread_cond_wait(&open_files_cond, &open_files_mutex);
     }
+		open_flag = 0;
     state_destroy();
     unlock_mutex(&open_files_mutex);
     destroy_mutex(&open_files_mutex);
@@ -119,6 +120,12 @@ static int _tfs_open_unsynchronized(char const *name, int flags) {
 }
 
 int tfs_open(char const *name, int flags) {
+		lock_mutex(&open_files_mutex);
+		if (open_flag == 0) {
+				unlock_mutex(&open_files_mutex);
+				return -1;
+		}
+		unlock_mutex(&open_files_mutex);
     if (pthread_mutex_lock(&single_global_lock) != 0)
         return -1;
     int ret = _tfs_open_unsynchronized(name, flags);

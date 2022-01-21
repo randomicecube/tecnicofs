@@ -72,5 +72,8 @@ extern int open_files_count;
 extern pthread_cond_t open_files_cond;
 extern pthread_mutex_t open_files_mutex;
 
+/* Condition that assures that tfs_open can only be used when tfs_init()
+ * has been called */
+extern int open_flag;
 
 #endif // STATE_H
