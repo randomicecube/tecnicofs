@@ -11,7 +11,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#define BUFFER_SIZE (128)
+#define BUFFER_SIZE (40)
 
 int main(int argc, char **argv) {
     if (argc < 2) {
@@ -43,36 +43,77 @@ int main(int argc, char **argv) {
     }
 
     char op_code;
-    char buffer[BUFFER_SIZE];
+    int session_id;
+    int fhandle;
+    int flags;
+    size_t len;
+    ssize_t ret;
+    char client_pipename[BUFFER_SIZE];
 
     while (true) {
-        ssize_t ret = read(rx, op_code, sizeof(char));
+        ret = read(rx, &op_code, sizeof(char));
+        if (ret == 0) {
+            close(rx);
+            rx = open(pipename, O_RDONLY);
+            if (rx == -1) {
+                fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
+                exit(EXIT_FAILURE);
+            }
+        }
+
         switch (op_code) {
             case TFS_OP_CODE_MOUNT:
-
+                ret = read(rx, client_pipename, sizeof(char) * (BUFFER_SIZE - 1));
+                for (ssize_t i = ret; i < BUFFER_SIZE - 1; i++) {
+                    client_pipename[i] = '\0';
+                }
+                // calls tfs_mount
                 break;
             case TFS_OP_CODE_UNMOUNT:
-
+                read(rx, &session_id, sizeof(int));
+                // calls tfs_unmount
                 break;
 
             case TFS_OP_CODE_OPEN:
-
+                read(rx, &session_id, sizeof(int));
+                ret = read(rx, client_pipename, sizeof(char) * (BUFFER_SIZE - 1));
+                for (ssize_t i = ret; i < BUFFER_SIZE - 1; i++) {
+                    client_pipename[i] = '\0';
+                }
+                read(rx, &flags, sizeof(int));
+                // calls tfs_open
                 break;
 
             case TFS_OP_CODE_CLOSE:
-
+                read(rx, &session_id, sizeof(int));
+                read(rx, &fhandle, sizeof(int));
+                // calls tfs_close
                 break;
 
             case TFS_OP_CODE_WRITE:
-
+                read(rx, &session_id, sizeof(int));
+                read(rx, &fhandle, sizeof(int));
+                read(rx, &len, sizeof(size_t));
+                char *buffer = malloc(sizeof(char) * len);
+                if (buffer == NULL) {
+                    fprintf(stderr, "[ERR]: malloc failed: %s\n", strerror(errno));
+                    exit(EXIT_FAILURE);
+                }
+                read(rx, buffer, sizeof(char)*len);
+                // calls tfs_write
+                free(buffer);
                 break;
 
             case TFS_OP_CODE_READ:
-
+                read(rx, &session_id, sizeof(int));
+                read(rx, &fhandle, sizeof(int));
+                read(rx, &len, sizeof(size_t));
+                // calls tfs_read
                 break;
 
             case TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED:
-
+                read(rx, &session_id, sizeof(int));
+                // calls tfs_shutdown_after_all_closed
                 break;
 
             default: break;
