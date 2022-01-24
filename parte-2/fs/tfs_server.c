@@ -68,10 +68,12 @@ int main(int argc, char **argv) {
                     client_pipename[i] = '\0';
                 }
                 // calls tfs_mount
+                tfs_mount(client_pipe_path, server_pipe_path); //????
                 break;
             case TFS_OP_CODE_UNMOUNT:
                 read(rx, &session_id, sizeof(int));
                 // calls tfs_unmount
+                tfs_unmount();
                 break;
 
             case TFS_OP_CODE_OPEN:
@@ -82,12 +84,14 @@ int main(int argc, char **argv) {
                 }
                 read(rx, &flags, sizeof(int));
                 // calls tfs_open
+                tfs_open(client_pipename, flags);
                 break;
 
             case TFS_OP_CODE_CLOSE:
                 read(rx, &session_id, sizeof(int));
                 read(rx, &fhandle, sizeof(int));
                 // calls tfs_close
+                tfs_close(fhandle);
                 break;
 
             case TFS_OP_CODE_WRITE:
@@ -101,6 +105,7 @@ int main(int argc, char **argv) {
                 }
                 read(rx, buffer, sizeof(char)*len);
                 // calls tfs_write
+                tfs_write(fhandle, buffer, /* towrite*/);
                 free(buffer);
                 break;
 
@@ -108,12 +113,15 @@ int main(int argc, char **argv) {
                 read(rx, &session_id, sizeof(int));
                 read(rx, &fhandle, sizeof(int));
                 read(rx, &len, sizeof(size_t));
+                void *buffer; //???
                 // calls tfs_read
+                tfs_read(fhandle, buffer, len);
                 break;
 
             case TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED:
                 read(rx, &session_id, sizeof(int));
                 // calls tfs_shutdown_after_all_closed
+                tfs_shutdown_after_all_closed();
                 break;
 
             default: break;

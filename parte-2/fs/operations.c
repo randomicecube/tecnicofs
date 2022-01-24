@@ -240,3 +240,18 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
 
     return ret;
 }
+
+int tfs_mount(char const *client_pipe_path, char const *server_pipe_path){
+    //TODO
+    return 0;
+}
+
+int tfs_unmount(){
+    //TODO
+    return 0;
+}
+
+int tfs_shutdown_after_all_closed(){
+    //TODO
+    return 0;
+}
