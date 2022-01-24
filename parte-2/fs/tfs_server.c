@@ -46,9 +46,12 @@ int main(int argc, char **argv) {
     int session_id;
     int fhandle;
     int flags;
+    int tx;
     size_t len;
     ssize_t ret;
+    char filename[BUFFER_SIZE];
     char client_pipename[BUFFER_SIZE];
+    char *buffer;
 
     while (true) {
         ret = read(rx, &op_code, sizeof(char));
@@ -61,12 +64,31 @@ int main(int argc, char **argv) {
             }
         }
 
+        // printf for debug purposed - TODO delete it
+        printf("[INFO]: Received op_code %c\n", op_code);
+
         switch (op_code) {
             case TFS_OP_CODE_MOUNT:
                 ret = read(rx, client_pipename, sizeof(char) * (BUFFER_SIZE - 1));
                 for (ssize_t i = ret; i < BUFFER_SIZE - 1; i++) {
                     client_pipename[i] = '\0';
                 }
+                if (unlink(client_pipename) != 0 && errno != ENOENT) {
+                    fprintf(stderr, "[ERR]: unlink(%s) failed: %s\n", client_pipename,
+                            strerror(errno));
+                    exit(EXIT_FAILURE);
+                }
+                if (mkfifo(client_pipename, 0777) != 0) {
+                    fprintf(stderr, "[ERR]: mkfifo failed: %s\n", strerror(errno));
+                    exit(EXIT_FAILURE);
+                }
+                tx = open(client_pipename, O_WRONLY);
+                if (tx == -1) {
+                    fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
+                    exit(EXIT_FAILURE);
+                }
+                // TODO - perhaps instead of exiting, just return -1
+                // TODO - MISSING SAVING SESSION_ID
                 // calls tfs_mount
                 break;
             case TFS_OP_CODE_UNMOUNT:
@@ -76,31 +98,34 @@ int main(int argc, char **argv) {
 
             case TFS_OP_CODE_OPEN:
                 read(rx, &session_id, sizeof(int));
-                ret = read(rx, client_pipename, sizeof(char) * (BUFFER_SIZE - 1));
+                ret = read(rx, filename, sizeof(char) * (BUFFER_SIZE - 1));
                 for (ssize_t i = ret; i < BUFFER_SIZE - 1; i++) {
-                    client_pipename[i] = '\0';
+                    filename[i] = '\0';
                 }
                 read(rx, &flags, sizeof(int));
-                // calls tfs_open
+                tfs_open(filename, flags);
+                // still missing session id stuff
                 break;
 
             case TFS_OP_CODE_CLOSE:
                 read(rx, &session_id, sizeof(int));
                 read(rx, &fhandle, sizeof(int));
-                // calls tfs_close
+                tfs_close(fhandle);
+                // still missing session id stuff
                 break;
 
             case TFS_OP_CODE_WRITE:
                 read(rx, &session_id, sizeof(int));
                 read(rx, &fhandle, sizeof(int));
                 read(rx, &len, sizeof(size_t));
-                char *buffer = malloc(sizeof(char) * len);
+                buffer = malloc(sizeof(char) * len);
                 if (buffer == NULL) {
                     fprintf(stderr, "[ERR]: malloc failed: %s\n", strerror(errno));
                     exit(EXIT_FAILURE);
                 }
                 read(rx, buffer, sizeof(char)*len);
-                // calls tfs_write
+                tfs_write(fhandle, buffer, len);
+                // still missing session id stuff
                 free(buffer);
                 break;
 
@@ -108,15 +133,25 @@ int main(int argc, char **argv) {
                 read(rx, &session_id, sizeof(int));
                 read(rx, &fhandle, sizeof(int));
                 read(rx, &len, sizeof(size_t));
-                // calls tfs_read
+                buffer = malloc(sizeof(char) * len);
+                if (buffer == NULL) {
+                    fprintf(stderr, "[ERR]: malloc failed: %s\n", strerror(errno));
+                    exit(EXIT_FAILURE);
+                }
+                tfs_read(fhandle, buffer, len);
+                free(buffer);
+                // still missing session id stuff
                 break;
 
             case TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED:
                 read(rx, &session_id, sizeof(int));
-                // calls tfs_shutdown_after_all_closed
+                tfs_destroy_after_all_closed();
+                // still missing session id stuff
                 break;
 
-            default: break;
+            default: 
+                fprintf(stderr, "[ERR]: Invalid op code: %d\n", op_code);
+                break;
         }
     }
 
