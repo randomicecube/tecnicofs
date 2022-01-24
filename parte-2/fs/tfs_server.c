@@ -12,6 +12,17 @@
 #include <unistd.h>
 
 #define BUFFER_SIZE (40)
+#define MAX_CLIENTS (60)
+
+typedef struct Client {
+    int rx; // pipe which the client reads to
+    int tx; // pipe which the client writes to
+    int session_id;
+    char *pipename;
+} Client;
+
+int next_session_id = 1;
+Client clients[MAX_CLIENTS];
 
 int main(int argc, char **argv) {
     if (argc < 2) {
@@ -87,13 +98,35 @@ int main(int argc, char **argv) {
                     fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
                     exit(EXIT_FAILURE);
                 }
+                ret = write(tx, &next_session_id, sizeof(int));
+                if (ret == -1) {
+                    fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
+                    exit(EXIT_FAILURE);
+                }
+                clients[next_session_id - 1].tx = tx;
+                clients[next_session_id - 1].rx = rx;
+                clients[next_session_id - 1].session_id = next_session_id;
+                clients[next_session_id - 1].pipename = client_pipename;
+                next_session_id++;
                 // TODO - perhaps instead of exiting, just return -1
-                // TODO - MISSING SAVING SESSION_ID
                 // calls tfs_mount
                 break;
             case TFS_OP_CODE_UNMOUNT:
+                // TODO - do we need to unlink the client pipe after it is closed? 
                 read(rx, &session_id, sizeof(int));
-                // calls tfs_unmount
+                if (close(clients[session_id - 1].tx) != 0) {
+                    fprintf(stderr, "[ERR]: close failed: %s\n", strerror(errno));
+                    exit(EXIT_FAILURE);
+                }
+                if (close(clients[session_id - 1].rx) != 0) {
+                    fprintf(stderr, "[ERR]: close failed: %s\n", strerror(errno));
+                    exit(EXIT_FAILURE);
+                }
+                if (unlink(clients[session_id - 1].pipename) != 0 && errno != ENOENT) {
+                    fprintf(stderr, "[ERR]: unlink(%s) failed: %s\n", clients[session_id - 1].pipename,
+                            strerror(errno));
+                    exit(EXIT_FAILURE);
+                }
                 break;
 
             case TFS_OP_CODE_OPEN:
