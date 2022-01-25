@@ -95,25 +95,25 @@ int tfs_open(char const *name, int flags) {
     char op_code = TFS_OP_CODE_OPEN;
     ret = write(client.tx, &op_code, sizeof(char));
 
-    if (ret == -1){
+    if (ret == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
 
     ret = write(client.tx, &client.session_id, sizeof(int));
-    if (ret == -1){
+    if (ret == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
 
     ret = write(client.tx, &name, sizeof(char)*strlen(name));
-    if (ret == -1){
+    if (ret == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
 
     ret = write(client.tx, &flags, sizeof(int));
-    if (ret == -1){
+    if (ret == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
@@ -125,19 +125,19 @@ int tfs_close(int fhandle) {
     char op_code = TFS_OP_CODE_CLOSE;
 
     ret = write(client.tx, &op_code, sizeof(char));
-    if (ret == -1){
+    if (ret == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
 
     ret = write(client.tx, &client.session_id, sizeof(int));
-    if (ret == -1){
+    if (ret == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
 
     ret = write(client.tx, &fhandle, sizeof(int));    
-    if (ret == -1){
+    if (ret == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
@@ -149,31 +149,31 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t len) {
     char op_code = TFS_OP_CODE_WRITE;
 
     ret = write(client.tx, &op_code, sizeof(char));
-    if (ret == -1){
+    if (ret == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
     
     ret = write(client.tx, &client.session_id, sizeof(int));
-    if (ret == -1){
+    if (ret == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
     
     ret = write(client.tx, &fhandle, sizeof(int));
-    if (ret == -1){
+    if (ret == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
     
     ret = write(client.tx, &len, sizeof(ssize_t));
-    if (ret == -1){
+    if (ret == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
     
     ret = write(client.tx, &buffer, sizeof(char)*len);
-    if (ret == -1){
+    if (ret == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
@@ -186,25 +186,25 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
     char op_code = TFS_OP_CODE_READ;
 
     ret = write(client.tx, &op_code, sizeof(char));
-    if (ret == -1){
+    if (ret == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
 
     ret = write(client.tx, &client.session_id, sizeof(int));
-    if (ret == -1){
+    if (ret == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
 
     ret = write(client.tx, &fhandle, sizeof(int));
-    if (ret == -1){
+    if (ret == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
 
     ret = write(client.tx, &len, sizeof(ssize_t));
-    if (ret == -1){
+    if (ret == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
@@ -217,13 +217,13 @@ int tfs_shutdown_after_all_closed() {
     char op_code = TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED;
 
     ret = write(client.tx, &op_code, sizeof(char));
-    if (ret == -1){
+    if (ret == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
 
     ret = write(client.tx, &client.session_id, sizeof(int));
-    if (ret == -1){
+    if (ret == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
