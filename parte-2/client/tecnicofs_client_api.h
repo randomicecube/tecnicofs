@@ -4,8 +4,6 @@
 #include "common/common.h"
 #include <sys/types.h>
 
-#define BUFFER_SIZE (40)
-
 /*
  * The Client struct holds information about the client in each process.
  * In particular, it saves information about:
