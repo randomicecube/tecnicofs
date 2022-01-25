@@ -60,6 +60,8 @@ int main(int argc, char **argv) {
     int tx;
     size_t len;
     ssize_t ret;
+    int tfs_ret_int;
+    ssize_t tfs_ret_ssize_t;
     char filename[BUFFER_SIZE];
     char client_pipename[BUFFER_SIZE];
     char *buffer;
@@ -109,7 +111,6 @@ int main(int argc, char **argv) {
                 clients[next_session_id - 1].pipename = client_pipename;
                 next_session_id++;
                 // TODO - perhaps instead of exiting, just return -1
-                // calls tfs_mount
                 break;
             case TFS_OP_CODE_UNMOUNT:
                 // TODO - do we need to unlink the client pipe after it is closed? 
@@ -136,15 +137,15 @@ int main(int argc, char **argv) {
                     filename[i] = '\0';
                 }
                 read(rx, &flags, sizeof(int));
-                tfs_open(filename, flags);
-                // still missing session id stuff
+                int call_ret = tfs_open(filename, flags);
+                write(clients[session_id - 1].tx, &call_ret, sizeof(int));
                 break;
 
             case TFS_OP_CODE_CLOSE:
                 read(rx, &session_id, sizeof(int));
                 read(rx, &fhandle, sizeof(int));
-                tfs_close(fhandle);
-                // still missing session id stuff
+                tfs_ret_int = tfs_close(fhandle);
+                write(clients[session_id - 1].tx, &tfs_ret_int, sizeof(int));
                 break;
 
             case TFS_OP_CODE_WRITE:
@@ -157,8 +158,8 @@ int main(int argc, char **argv) {
                     exit(EXIT_FAILURE);
                 }
                 read(rx, buffer, sizeof(char)*len);
-                tfs_write(fhandle, buffer, len);
-                // still missing session id stuff
+                tfs_ret_ssize_t = tfs_write(fhandle, buffer, len);
+                write(clients[session_id - 1].tx, &tfs_ret_ssize_t, sizeof(ssize_t));
                 free(buffer);
                 break;
 
@@ -171,15 +172,15 @@ int main(int argc, char **argv) {
                     fprintf(stderr, "[ERR]: malloc failed: %s\n", strerror(errno));
                     exit(EXIT_FAILURE);
                 }
-                tfs_read(fhandle, buffer, len);
+                tfs_ret_ssize_t = tfs_read(fhandle, buffer, len);
+                write(clients[session_id - 1].tx, &tfs_ret_ssize_t, sizeof(ssize_t));
                 free(buffer);
-                // still missing session id stuff
                 break;
 
             case TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED:
                 read(rx, &session_id, sizeof(int));
-                tfs_destroy_after_all_closed();
-                // still missing session id stuff
+                tfs_ret_int = tfs_destroy_after_all_closed();
+                write(clients[session_id - 1].tx, &tfs_ret_int, sizeof(int));
                 break;
 
             default: 

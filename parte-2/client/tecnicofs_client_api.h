@@ -4,6 +4,23 @@
 #include "common/common.h"
 #include <sys/types.h>
 
+#define BUFFER_SIZE (40)
+
+/*
+ * The Client struct holds information about the client in each process.
+ * In particular, it saves information about:
+ * - the pipe used to write from the client to the server
+ * - the pipe used to read from the server to the client
+ * - the client's associated session id
+ * - the client's specific pipename (used to write to the server)
+ */
+typedef struct Client {
+    int rx;
+    int tx;
+    int session_id;
+    char *pipename;
+} Client;
+
 /*
  * Establishes a session with a TecnicoFS server.
  * Input:
@@ -77,5 +94,47 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len);
  * Returns 0 if successful, -1 otherwise.
  */
 int tfs_shutdown_after_all_closed();
+
+/*
+  * Writes the opcode to the server
+  * Input:
+  *   - pipe which is used to communicate with the server
+  *   - opcode
+  * Returns 0 if successful, -1 otherwise.
+  */
+int send_msg_opcode(int tx, char opcode);
+
+/*
+  * Writes a buffer (char array) to the server
+  * Input:
+  *   - pipe which is used to communicate with the server
+  *   - buffer
+  * Returns 0 if successful, -1 otherwise.
+  */
+int send_msg_str(int tx, char const *buffer);
+
+/*
+  * Writes an integer to the server
+  * Input:
+  *  - pipe which is used to communicate with the server
+  *  - integer
+  * Returns 0 if successful, -1 otherwise.
+  */
+int send_msg_int(int tx, int arg);
+
+/*
+  * Writes a size_t to the server
+  * Input:
+  *  - pipe which is used to communicate with the server
+  *  - ssize_t argument
+  * Returns 0 if successful, -1 otherwise.
+  */
+int send_msg_size_t(int tx, size_t arg);
+
+/*
+  * Checks for errors after writing in a file
+  * Returns 0 if successful, -1 otherwise.
+  */
+int check_errors(ssize_t ret);
 
 #endif /* CLIENT_API_H */
