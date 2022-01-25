@@ -96,41 +96,27 @@ int tfs_open(char const *name, int flags) {
     ret = write(client.tx, &op_code, sizeof(char));
 
     if (ret == -1){
-        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(eerno));
+        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
 
     ret = write(client.tx, &client.session_id, sizeof(int));
     if (ret == -1){
-        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(eerno));
+        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
 
-    ret = write(client.tx, &name, sizeof(char)*BUFFER_SIZE);
+    ret = write(client.tx, &name, sizeof(char)*strlen(name));
     if (ret == -1){
-        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(eerno));
+        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
 
     ret = write(client.tx, &flags, sizeof(int));
     if (ret == -1){
-        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(eerno));
+        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
-
-    if (close(client.rx) == -1) {
-        fprintf(stderr, "[ERR]: close failed: %s\n", strerror(errno));
-        return -1;
-    }
-    if (close(client.tx) == -1) {
-        fprintf(stderr, "[ERR]: close failed: %s\n", strerror(errno));
-        return -1;
-    }
-    if (unlink(client.pipename) != 0) {
-        fprintf(stderr, "[ERR]: unlink failed: %s\n", strerror(errno));
-        return -1;
-    } // TODO - do we need to unlink the client pipe here?    
-
     return 0;
 }
 
@@ -139,42 +125,22 @@ int tfs_close(int fhandle) {
     char op_code = TFS_OP_CODE_CLOSE;
 
     ret = write(client.tx, &op_code, sizeof(char));
-
     if (ret == -1){
-        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(eerno));
+        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
 
     ret = write(client.tx, &client.session_id, sizeof(int));
-
     if (ret == -1){
-        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(eerno));
+        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
 
-    ret = write(client.tx, &fhandle, sizeof(int));
-    
+    ret = write(client.tx, &fhandle, sizeof(int));    
     if (ret == -1){
-        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(eerno));
+        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
-    
-    if (close(client.rx) == -1) {
-        fprintf(stderr, "[ERR]: close failed: %s\n", strerror(errno));
-        return -1;
-    }
-    
-    if (close(client.tx) == -1) {
-        fprintf(stderr, "[ERR]: close failed: %s\n", strerror(errno));
-        return -1;
-    }
-    
-    if (unlink(client.pipename) != 0) {
-        fprintf(stderr, "[ERR]: unlink failed: %s\n", strerror(errno));
-        return -1;
-    } // TODO - do we need to unlink the client pipe here?    
-
-
     return 0;
 }
 
@@ -184,50 +150,34 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t len) {
 
     ret = write(client.tx, &op_code, sizeof(char));
     if (ret == -1){
-        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(eerno));
+        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
     
     ret = write(client.tx, &client.session_id, sizeof(int));
     if (ret == -1){
-        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(eerno));
+        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
     
     ret = write(client.tx, &fhandle, sizeof(int));
     if (ret == -1){
-        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(eerno));
+        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
     
     ret = write(client.tx, &len, sizeof(ssize_t));
     if (ret == -1){
-        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(eerno));
+        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
     
-    ret = write(client.tx, &buffer, sizeof(char)*len); //not sure about this one
+    ret = write(client.tx, &buffer, sizeof(char)*len);
     if (ret == -1){
-        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(eerno));
+        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
 
-    if (close(client.rx) == -1) {
-        fprintf(stderr, "[ERR]: close failed: %s\n", strerror(errno));
-        return -1;
-    }
-    
-    if (close(client.tx) == -1) {
-        fprintf(stderr, "[ERR]: close failed: %s\n", strerror(errno));
-        return -1;
-    }
-    
-    if (unlink(client.pipename) != 0) {
-        fprintf(stderr, "[ERR]: unlink failed: %s\n", strerror(errno));
-        return -1;
-    } // TODO - do we need to unlink the client pipe here?    
-
-    
     return 0;
 }
 
@@ -237,42 +187,27 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
 
     ret = write(client.tx, &op_code, sizeof(char));
     if (ret == -1){
-        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(eerno));
+        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
 
     ret = write(client.tx, &client.session_id, sizeof(int));
     if (ret == -1){
-        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(eerno));
+        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
 
     ret = write(client.tx, &fhandle, sizeof(int));
     if (ret == -1){
-        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(eerno));
+        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
 
     ret = write(client.tx, &len, sizeof(ssize_t));
     if (ret == -1){
-        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(eerno));
+        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
-
-    if (close(client.rx) == -1) {
-        fprintf(stderr, "[ERR]: close failed: %s\n", strerror(errno));
-        return -1;
-    }
-    
-    if (close(client.tx) == -1) {
-        fprintf(stderr, "[ERR]: close failed: %s\n", strerror(errno));
-        return -1;
-    }
-    
-    if (unlink(client.pipename) != 0) {
-        fprintf(stderr, "[ERR]: unlink failed: %s\n", strerror(errno));
-        return -1;
-    } // TODO - do we need to unlink the client pipe here?    
 
     return 0;
 }
@@ -283,30 +218,21 @@ int tfs_shutdown_after_all_closed() {
 
     ret = write(client.tx, &op_code, sizeof(char));
     if (ret == -1){
-        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(eerno));
+        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
 
     ret = write(client.tx, &client.session_id, sizeof(int));
     if (ret == -1){
-        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(eerno));
+        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
 
-    if (close(client.rx) == -1) {
-        fprintf(stderr, "[ERR]: close failed: %s\n", strerror(errno));
-        return -1;
-    }
-    
-    if (close(client.tx) == -1) {
-        fprintf(stderr, "[ERR]: close failed: %s\n", strerror(errno));
-        return -1;
-    }
-    
-    if (unlink(client.pipename) != 0) {
-        fprintf(stderr, "[ERR]: unlink failed: %s\n", strerror(errno));
-        return -1;
-    } // TODO - do we need to unlink the client pipe here?
-    
+    // TODO - DO WE NEED TO CLOSE AND UNLINK HERE?
     return 0;
 }
+
+// TODO - SEND ACKNLOWGEMENET INFORMATION FROM THE SERVER
+// SEEMS MAINLY IMPORTANT FOR THE SHUTDOWN AFTER ALL CLOSED BIT
+// ALSO FOR READ AND WRITE IT'S NEEDED (SUPPOSED TO RETURN 
+// THE NUMBER OF BYTES WRITTEN/READ)
