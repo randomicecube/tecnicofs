@@ -12,7 +12,7 @@
 #include <unistd.h>
 
 #define BUFFER_SIZE (40)
-#define MAX_CLIENTS (60)
+#define MAX_CLIENTS (64)
 
 typedef struct Client {
     int rx; // pipe which the client reads to
