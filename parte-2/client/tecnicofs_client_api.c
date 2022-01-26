@@ -91,6 +91,10 @@ int tfs_open(char const *name, int flags) {
         return -1;
     }
     ret = (int) read(client.rx, &ret, sizeof(int));
+    if (ret == -1) {
+        fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
+        return -1;
+    }
     return ret;
 }
 
@@ -108,6 +112,10 @@ int tfs_close(int fhandle) {
         return -1;
     }
     ret = (int) read(client.rx, &ret, sizeof(int));
+    if (ret == -1) {
+        fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
+        return -1;
+    }
     return ret;
 }
 
@@ -131,6 +139,10 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t len) {
         return -1;
     }
     ret = read(client.rx, &ret, sizeof(ssize_t));
+    if (ret == -1)  {
+        fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
+        return -1;
+    }
     return ret;
 }
 
@@ -154,11 +166,16 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
         return -1;
     }
     read(client.rx, &ret, sizeof(ssize_t));
+    if (ret == -1) {
+        fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
+        return -1;
+    }
     return ret;
 }
 
 int tfs_shutdown_after_all_closed() {
-    int ret;
+    int shutdown_ack;
+    ssize_t ret;
     char op_code = TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED;
 
     if (send_msg_opcode(client.tx, op_code) == -1) {
@@ -167,36 +184,40 @@ int tfs_shutdown_after_all_closed() {
     if (send_msg_int(client.tx, client.session_id) == -1) {
         return -1;
     }
-    read(client.rx, &ret, sizeof(int)); // error propagation from the server
+    ret = read(client.rx, &shutdown_ack, sizeof(int)); // error propagation from the server
+    if (ret == -1) {
+        fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
+        return -1;
+    }
     // TODO - DO WE NEED TO CLOSE AND UNLINK HERE?
-    return ret;
+    return shutdown_ack;
 }
 
 int send_msg_opcode(int tx, char opcode) {
     ssize_t ret;
     ret = write(tx, &opcode, sizeof(char));
-    return check_errors(ret);
+    return check_errors_write(ret);
 }
 
 int send_msg_str(int tx, char const* buffer){
     ssize_t ret;
     ret = write(tx, buffer, sizeof(char)*strlen(buffer));
-    return check_errors(ret);
+    return check_errors_write(ret);
 }
 
 int send_msg_int(int tx, int arg) {
     ssize_t ret;
     ret = write(tx, &arg, sizeof(int));
-    return check_errors(ret);
+    return check_errors_write(ret);
 }
 
 int send_msg_size_t(int tx, size_t arg) {
     ssize_t ret;
     ret = write(tx, &arg, sizeof(size_t));
-    return check_errors(ret);
+    return check_errors_write(ret);
 }
 
-int check_errors(ssize_t ret) {
+int check_errors_write(ssize_t ret) {
     if (ret == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;

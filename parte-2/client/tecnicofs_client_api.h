@@ -133,6 +133,6 @@ int send_msg_size_t(int tx, size_t arg);
   * Checks for errors after writing in a file
   * Returns 0 if successful, -1 otherwise.
   */
-int check_errors(ssize_t ret);
+int check_errors_write(ssize_t ret);
 
 #endif /* CLIENT_API_H */
