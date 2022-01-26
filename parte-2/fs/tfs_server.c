@@ -75,6 +75,7 @@ int main(int argc, char **argv) {
         printf("[INFO]: Received op_code %c\n", op_code);
 
         switch (op_code) {
+            // TODO - HANDLE CASE WHERE NEXT SESSION ID IS OVER 64
             case TFS_OP_CODE_MOUNT:
                 case_mount(rx);
                 break;
