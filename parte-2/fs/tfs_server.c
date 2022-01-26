@@ -54,6 +54,7 @@ int main(int argc, char **argv) {
     }
 
     char op_code;
+    bool shutting_down = false;
     int session_id;
     int fhandle;
     int flags;
@@ -66,8 +67,10 @@ int main(int argc, char **argv) {
     char client_pipename[BUFFER_SIZE];
     char *buffer;
 
-    while (true) {
+    do {
         ret = read(rx, &op_code, sizeof(char));
+        // TODO - here do we open the pipe again or do we leave the loop?
+        // we have to break somewhere
         if (ret == 0) {
             close(rx);
             rx = open(pipename, O_RDONLY);
@@ -181,13 +184,14 @@ int main(int argc, char **argv) {
                 read(rx, &session_id, sizeof(int));
                 tfs_ret_int = tfs_destroy_after_all_closed();
                 write(clients[session_id - 1].tx, &tfs_ret_int, sizeof(int));
+                shutting_down = true;
                 break;
 
             default: 
                 fprintf(stderr, "[ERR]: Invalid op code: %d\n", op_code);
                 break;
         }
-    }
+    } while(!shutting_down);
 
     close(rx);
     unlink(pipename);
