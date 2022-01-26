@@ -192,7 +192,7 @@ int send_msg_int(int tx, int arg) {
 
 int send_msg_size_t(int tx, size_t arg) {
     ssize_t ret;
-    ret = write(tx, &arg, sizeof(ssize_t));
+    ret = write(tx, &arg, sizeof(size_t));
     return check_errors(ret);
 }
 
