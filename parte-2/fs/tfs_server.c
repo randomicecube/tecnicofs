@@ -69,8 +69,6 @@ int main(int argc, char **argv) {
 
     do {
         ret = read(rx, &op_code, sizeof(char));
-        // TODO - here do we open the pipe again or do we leave the loop?
-        // we have to break somewhere
         if (ret == 0) {
             close(rx);
             rx = open(pipename, O_RDONLY);
@@ -80,7 +78,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        // printf for debug purposed - TODO delete it
+        // printf for debug purposes - TODO delete it
         printf("[INFO]: Received op_code %c\n", op_code);
 
         switch (op_code) {
