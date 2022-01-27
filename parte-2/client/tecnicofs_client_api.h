@@ -19,6 +19,18 @@ typedef struct Client {
     char pipename[BUFFER_SIZE];
 } Client;
 
+typedef struct Pipe_men {
+    int session_id;
+    char opcode;
+    char *name;
+    int flags;
+    int fhandle;
+    size_t len;
+    char *buffer;
+
+} Pipe_men;
+
+
 /*
  * Establishes a session with a TecnicoFS server.
  * Input:
@@ -92,6 +104,8 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len);
  * Returns 0 if successful, -1 otherwise.
  */
 int tfs_shutdown_after_all_closed();
+
+int send_msg(int tx, Pipe_men message);
 
 /*
   * Writes the opcode to the server
