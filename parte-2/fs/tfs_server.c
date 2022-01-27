@@ -11,7 +11,6 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#define BUFFER_SIZE (40)
 #define MAX_CLIENTS (64)
 
 typedef struct Client {
@@ -34,20 +33,24 @@ int main(int argc, char **argv) {
     printf("Starting TecnicoFS server with pipe called %s\n", pipename);
 
     // unlink pipe
+    printf("Unlinking pipe %s...\n", pipename);
     if (unlink(pipename) != 0 && errno != ENOENT) {
         fprintf(stderr, "[ERR]: unlink(%s) failed: %s\n", pipename,
                 strerror(errno));
         exit(EXIT_FAILURE);
     }
 
+    printf("Creating pipe %s...\n", pipename);
     // create pipe
-    if (mkfifo(pipename, 0777) != 0) {
+    if (mkfifo(pipename, 0640) != 0) {
         fprintf(stderr, "[ERR]: mkfifo failed: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
 
+    printf("Opening pipe %s for reading...\n", pipename);
     // open pipe for reading
-    int rx = open(pipename, O_RDONLY);
+    int rx = open(pipename, O_RDWR);
+    printf("Checking if pipe %s is open...\n", pipename);
     if (rx == -1) {
         fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
@@ -57,7 +60,10 @@ int main(int argc, char **argv) {
     ssize_t ret;
     bool shutting_down = false;
     do {
+        printf("Actively waiting for a message...\n");
+        printf("rx is %d\n", rx);
         ret = read(rx, &op_code, sizeof(char));
+        printf("Message received.\n");
         if (ret == -1) {
             fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
             exit(EXIT_FAILURE);
@@ -77,25 +83,39 @@ int main(int argc, char **argv) {
         switch (op_code) {
             // TODO - HANDLE CASE WHERE NEXT SESSION ID IS OVER 64
             case TFS_OP_CODE_MOUNT:
+                printf("[INFO]: Received TFS_OP_CODE_MOUNT\n");
                 case_mount(rx);
+                printf("[INFO]: Mounted\n");
                 break;
             case TFS_OP_CODE_UNMOUNT:
+                printf("[INFO]: Received TFS_OP_CODE_UNMOUNT\n");
                 case_unmount(rx);
+                printf("[INFO]: Unmounted\n");
                 break;
             case TFS_OP_CODE_OPEN:
+                printf("[INFO]: Received TFS_OP_CODE_OPEN\n");
                 case_open(rx);
+                printf("[INFO]: Opened\n");
                 break;
             case TFS_OP_CODE_CLOSE:
+                printf("[INFO]: Received TFS_OP_CODE_CLOSE\n");
                 case_close(rx);
+                printf("[INFO]: Closed\n");
                 break;
             case TFS_OP_CODE_WRITE:
+                printf("[INFO]: Received TFS_OP_CODE_WRITE\n");
                 case_write(rx);
+                printf("[INFO]: Wrote\n");
                 break;
             case TFS_OP_CODE_READ:
+                printf("[INFO]: Received TFS_OP_CODE_READ\n");
                 case_read(rx);
+                printf("[INFO]: Read\n");
                 break;
             case TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED:
+                printf("[INFO]: Received TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED\n");
                 case_shutdown(rx);
+                printf("[INFO]: Shut down\n");
                 shutting_down = true;
                 break;
             default: 
@@ -190,15 +210,6 @@ void case_mount(int rx) {
     for (ssize_t i = pipename_length; i < BUFFER_SIZE - 1; i++) {
         client_pipename[i] = '\0';
     }
-    if (unlink(client_pipename) != 0 && errno != ENOENT) {
-        fprintf(stderr, "[ERR]: unlink(%s) failed: %s\n", client_pipename,
-                strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-    if (mkfifo(client_pipename, 0777) != 0) {
-        fprintf(stderr, "[ERR]: mkfifo failed: %s\n", strerror(errno));
-        exit(EXIT_FAILURE);
-    }
     tx = open(client_pipename, O_WRONLY);
     if (tx == -1) {
         fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
@@ -237,12 +248,14 @@ void case_open(int rx) {
     ssize_t filename_length;
     read_msg_int(rx, &session_id);
     read_msg_pipename(rx, filename);
+    read_msg_int(rx, &flags);
     filename_length = (ssize_t) strlen(filename);
     for (ssize_t i = filename_length; i < BUFFER_SIZE - 1; i++) {
         filename[i] = '\0';
     }
-    read_msg_int(rx, &flags);
     int call_ret = tfs_open(filename, flags);
+    printf("[INFO]: tfs_open returned %d\n", call_ret);
+    printf("[INFO]: Opened %s\n", filename);
     send_msg_int(clients[session_id - 1].tx, call_ret);
 }
 
@@ -287,7 +300,9 @@ void case_read(int rx) {
         fprintf(stderr, "[ERR]: malloc failed: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
+    printf("len is %zu\n", len);
     tfs_ret_ssize_t = tfs_read(fhandle, buffer, len);
+    printf("tfs_ret_ssize_t is %zd\n", tfs_ret_ssize_t);
     send_msg_ssize_t(clients[session_id - 1].tx, tfs_ret_ssize_t);
     free(buffer);
 }

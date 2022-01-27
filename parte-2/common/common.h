@@ -19,4 +19,6 @@ enum {
     TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED = 7
 };
 
+#define BUFFER_SIZE (40)
+
 #endif /* COMMON_H */

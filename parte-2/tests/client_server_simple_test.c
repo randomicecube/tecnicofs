@@ -22,12 +22,18 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    printf("Initializing client...\n");
     assert(tfs_mount(argv[1], argv[2]) == 0);
+    printf("Client initialized.\n");
 
+    printf("Creating file...\n");
     f = tfs_open(path, TFS_O_CREAT);
+    printf("File created.\n");
     assert(f != -1);
 
     r = tfs_write(f, str, strlen(str));
+    printf("r is %ld\n", r);
+    printf("strlen(str) is %ld\n", strlen(str));
     assert(r == strlen(str));
 
     assert(tfs_close(f) != -1);
@@ -35,7 +41,10 @@ int main(int argc, char **argv) {
     f = tfs_open(path, 0);
     assert(f != -1);
 
+    printf("going to read\n");
     r = tfs_read(f, buffer, sizeof(buffer) - 1);
+    printf("r is %ld\n", r);
+    printf("strlen(str) is %ld\n", strlen(str));
     assert(r == strlen(str));
 
     buffer[r] = '\0';

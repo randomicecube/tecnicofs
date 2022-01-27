@@ -16,7 +16,7 @@ typedef struct Client {
     int rx;
     int tx;
     int session_id;
-    char *pipename;
+    char pipename[BUFFER_SIZE];
 } Client;
 
 /*
@@ -130,9 +130,53 @@ int send_msg_int(int tx, int arg);
 int send_msg_size_t(int tx, size_t arg);
 
 /*
+ * Reads a buffer (char array) from a pipe
+ * Input:
+ *   - pipe from which the buffer is read
+ *   - buffer
+ * Returns 0 if successful.
+ */
+int read_msg_str(int rx, char *buffer, size_t len);
+
+/*
+ * Reads a pipename from a pipe
+ * Works differently from read_msg_str: here, we don't know the expected length
+ * We just know it will have at most 40 chars
+ * Input:
+ *   - pipe from which the pipename is read
+ *   - pipename
+ * Returns 0 if successful.
+ */
+int read_msg_pipename(int rx, char *pipename);
+
+/*
+ * Reads an int from a pipe
+ * Input:
+ *   - pipe from which the int is read
+ *   - int argument
+ * Returns 0 if successful.
+ */
+int read_msg_int(int rx, int *arg);
+
+/*
+ * Reads an ssize_t from a pipe
+ * Input:
+ *   - pipe from which the size_t is read
+ *   - size_t argument
+ * Returns 0 if successful.
+ */
+int read_msg_ssize_t(int rx, ssize_t *arg);
+
+/*
   * Checks for errors after writing in a file
   * Returns 0 if successful, -1 otherwise.
   */
 int check_errors_write(ssize_t ret);
+
+/*
+  * Checks for errors after reading from a file
+  * Returns 0 if successful.
+  */
+int check_errors_read(ssize_t ret);
 
 #endif /* CLIENT_API_H */
