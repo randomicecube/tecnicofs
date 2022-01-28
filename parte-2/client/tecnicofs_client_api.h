@@ -21,11 +21,17 @@ typedef struct Client {
 
 typedef struct Pipe_men {
     int session_id;
+
     char opcode;
+
     char *name;
+
     int flags;
+    
     int fhandle;
+    
     size_t len;
+    
     char *buffer;
 
 } Pipe_men;
@@ -107,6 +113,7 @@ int tfs_shutdown_after_all_closed();
 
 int send_msg(int tx, Pipe_men message);
 
+int send_msg_pipename(int tx, char* pipename);
 /*
   * Writes the opcode to the server
   * Input:

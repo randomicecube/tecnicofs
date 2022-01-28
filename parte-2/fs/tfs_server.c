@@ -22,11 +22,17 @@ typedef struct Client {
 
 typedef struct Pipe_men {
     int session_id;
+    
     char opcode;
+    
     char *name;
+    
     int flags;
+    
     int fhandle;
+    
     size_t len;
+    
     char *buffer;
 
 } Pipe_men;
@@ -67,11 +73,11 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
 
-    Pipe_men message;
     char op_code;
     ssize_t ret;
     bool shutting_down = false;
     do {
+        Pipe_men message;
         printf("Actively waiting for a message...\n");
         printf("rx is %d\n", rx);
         ret = read(rx, &message, sizeof(Pipe_men));
@@ -143,6 +149,12 @@ int main(int argc, char **argv) {
 }
 
 // send_msg and check errors functions
+
+int send_msg(int tx, Pipe_men message){
+    ssize_t ret;
+    ret = write(tx, &message, sizeof(Pipe_men));
+    return check_errors_write(ret);
+}
 
 int send_msg_opcode(int tx, char opcode) {
     ssize_t ret;
@@ -224,17 +236,25 @@ void case_mount(int rx) {
     ssize_t pipename_length;
     char client_pipename[BUFFER_SIZE];
     int tx;
+    Pipe_men message;
+    puts("brah");
     read_msg_pipename(rx, client_pipename);
     pipename_length = (ssize_t) strlen(client_pipename);
+    printf("tf\n");
     for (ssize_t i = pipename_length; i < BUFFER_SIZE - 1; i++) {
         client_pipename[i] = '\0';
     }
+    printf("server1\n");
     tx = open(client_pipename, O_WRONLY);
+    printf("%s\n", client_pipename);
     if (tx == -1) {
         fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
-    send_msg_int(tx, next_session_id);
+    printf("server2\n");
+    message.session_id = next_session_id;
+    send_msg(tx, message);
+    printf("server3\n");
     clients[next_session_id - 1].tx = tx;
     clients[next_session_id - 1].rx = rx;
     clients[next_session_id - 1].session_id = next_session_id;

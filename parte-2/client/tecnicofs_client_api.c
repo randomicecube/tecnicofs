@@ -13,21 +13,26 @@
 Client client; // each client is singular for each process
 
 int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
+    printf("Olá\n");
     if (unlink(client_pipe_path) != 0 && errno != ENOENT) {
         fprintf(stderr, "[ERR]: unlink(%s) failed: %s\n", client_pipe_path,
                 strerror(errno));
         return -1;
     }
+    printf("Olá2\n");
     if (mkfifo(client_pipe_path, 0640) != 0) {
         fprintf(stderr, "[ERR]: mkfifo failed: %s\n", strerror(errno));
         return -1;
     }
+    printf("Olá3\n");
     client.rx = open(client_pipe_path, O_RDWR);
     if (client.rx == -1) {
         fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
         return -1;
     }
+    printf("Olá4\n");
     client.tx = open(server_pipe_path, O_WRONLY);
+
     if (client.tx == -1) {
         fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
         return -1;
@@ -35,22 +40,27 @@ int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
 
     Pipe_men message;
     message.opcode = TFS_OP_CODE_MOUNT;
-    strcpy(message.name, client_pipe_path);
-    message.session_id = 0;
-    message.flags = 0;
-    message.fhandle = 0;
-    message.len = 0;
-    message.buffer = NULL;
 
     if (send_msg(client.tx, message) == -1) {
         return -1;
     }
+
+    if (send_msg_str(client.tx, client_pipe_path) == -1){
+        return -1;
+    }
+
+    printf("Olá5\n");
+    printf("Adeus\n");
     // the server returns the session id
-    ssize_t ret = read(client.rx, &client.session_id, sizeof(int));
+    ssize_t ret = read(client.rx, &message, sizeof(Pipe_men));
+    printf("Wiskas saketas\n");
     if (ret == -1) {
         fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
         return -1;
     }
+    client.session_id = message.session_id;
+
+    printf("Olá6\n");
     strcpy(client.pipename, client_pipe_path);
     return 0;
 }
@@ -202,12 +212,6 @@ int send_msg_opcode(int tx, char opcode) {
     return check_errors_write(ret);
 }
 
-int send_msg_str(int tx, char const* buffer){
-    ssize_t ret;
-    ret = write(tx, buffer, sizeof(char)*strlen(buffer));
-    return check_errors_write(ret);
-}
-
 int send_msg_int(int tx, int arg) {
     ssize_t ret;
     ret = write(tx, &arg, sizeof(int));
@@ -220,6 +224,25 @@ int send_msg_size_t(int tx, size_t arg) {
     return check_errors_write(ret);
 }
 */
+
+int send_msg_str(int tx, char const* buffer){
+    ssize_t ret;
+    ret = write(tx, buffer, sizeof(char)*strlen(buffer));
+    return check_errors_write(ret);
+}
+
+int send_msg_pipename(int tx, char* pipename) {
+    ssize_t ret;
+    ret = write(tx, pipename, sizeof(char) * (BUFFER_SIZE - 1));
+    check_errors_read(ret);
+    return 0;
+}
+
+int read_msg(int rx, Pipe_men *message){
+    ssize_t ret;
+    ret = read(rx, message, sizeof(Pipe_men));
+    return check_errors_read(ret);
+}
 
 int read_msg_pipename(int rx, char* pipename) {
     ssize_t ret;
