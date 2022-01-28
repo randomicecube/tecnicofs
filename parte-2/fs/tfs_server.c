@@ -20,6 +20,17 @@ typedef struct Client {
     char *pipename;
 } Client;
 
+typedef struct Pipe_men {
+    int session_id;
+    char opcode;
+    char *name;
+    int flags;
+    int fhandle;
+    size_t len;
+    char *buffer;
+
+} Pipe_men;
+
 int next_session_id = 1;
 Client clients[MAX_CLIENTS];
 
@@ -56,13 +67,15 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
 
+    Pipe_men message;
     char op_code;
     ssize_t ret;
     bool shutting_down = false;
     do {
         printf("Actively waiting for a message...\n");
         printf("rx is %d\n", rx);
-        ret = read(rx, &op_code, sizeof(char));
+        ret = read(rx, &message, sizeof(Pipe_men));
+        op_code = message.opcode;
         printf("Message received.\n");
         if (ret == -1) {
             fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
@@ -155,6 +168,12 @@ int send_msg_ssize_t(int tx, ssize_t arg) {
     return check_errors_write(ret);
 }
 
+int read_msg(int rx, Pipe_men *message){
+    ssize_t ret;
+    ret = read(rx, message, sizeof(Pipe_men));
+    return check_errors_read(ret);
+}
+
 int read_msg_pipename(int rx, char* pipename) {
     ssize_t ret;
     ret = read(rx, pipename, sizeof(char) * BUFFER_SIZE - 1);
@@ -225,8 +244,10 @@ void case_mount(int rx) {
 
 void case_unmount(int rx) {
     // TODO - do we need to unlink the client pipe after it is closed? 
+    Pipe_men message;
     int session_id;
-    read_msg_int(rx, &session_id);
+    read_msg(rx, &message);
+    session_id = message.session_id;
     if (close(clients[session_id - 1].tx) != 0) {
         fprintf(stderr, "[ERR]: close failed: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
@@ -243,12 +264,14 @@ void case_unmount(int rx) {
 }
 
 void case_open(int rx) {
+    Pipe_men message;
     int session_id, flags;
     char filename[BUFFER_SIZE];
     ssize_t filename_length;
-    read_msg_int(rx, &session_id);
-    read_msg_pipename(rx, filename);
-    read_msg_int(rx, &flags);
+    read_msg(rx, &message);
+    session_id = message.session_id;
+    flags = message.flags;
+    strcpy(filename, message.name);
     filename_length = (ssize_t) strlen(filename);
     for (ssize_t i = filename_length; i < BUFFER_SIZE - 1; i++) {
         filename[i] = '\0';
@@ -261,8 +284,12 @@ void case_open(int rx) {
 
 void case_close(int rx) {
     int session_id, fhandle;
-    read_msg_int(rx, &session_id);
-    read_msg_int(rx, &fhandle);
+    Pipe_men message;
+
+    read_msg(rx, &message);
+    session_id = message.session_id;
+    fhandle = message.fhandle;
+
     int tfs_ret_int = tfs_close(fhandle);
     send_msg_int(clients[session_id - 1].tx, tfs_ret_int);
 }
@@ -272,16 +299,17 @@ void case_write(int rx) {
     size_t len;
     char *buffer;
     ssize_t tfs_ret_ssize_t;
-    read_msg_int(rx, &session_id);
-    read_msg_int(rx, &fhandle);
-    read_msg_int(rx, &fhandle);
-    read_msg_size_t(rx, &len);
+    Pipe_men message;
+    read_msg(rx, &message);
+    session_id = message.session_id;
+    fhandle = message.fhandle;
+    len = message.len;
     buffer = malloc(sizeof(char) * len);
     if (buffer == NULL) {
         fprintf(stderr, "[ERR]: malloc failed: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
-    read_msg_str(rx, buffer, len);
+    strcpy(buffer, message.buffer);
     tfs_ret_ssize_t = tfs_write(fhandle, buffer, len);
     send_msg_ssize_t(clients[session_id - 1].tx, tfs_ret_ssize_t);
     free(buffer);
@@ -292,9 +320,11 @@ void case_read(int rx) {
     size_t len;
     char *buffer;
     ssize_t tfs_ret_ssize_t;
-    read_msg_int(rx, &session_id);
-    read_msg_int(rx, &fhandle);
-    read_msg_size_t(rx, &len);
+    Pipe_men message;
+    read_msg(rx, &message);
+    session_id = message.session_id;
+    fhandle = message.fhandle;
+    len = message.len;
     buffer = malloc(sizeof(char) * len);
     if (buffer == NULL) {
         fprintf(stderr, "[ERR]: malloc failed: %s\n", strerror(errno));
@@ -309,7 +339,9 @@ void case_read(int rx) {
 
 void case_shutdown(int rx) {
     int session_id, tfs_ret_int;
-    read_msg_int(rx, &session_id);
+    Pipe_men message;
+    read_msg(rx, &message);
+    session_id = message.session_id;
     tfs_ret_int = tfs_destroy_after_all_closed();
     send_msg_int(clients[session_id - 1].tx, tfs_ret_int);
 }
