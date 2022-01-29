@@ -94,7 +94,7 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len);
  */
 int tfs_shutdown_after_all_closed();
 
-int send_msg(int tx, char *request, size_t len);
+int send_msg(int tx, char *request);
 
 int send_msg_pipename(int tx, char* pipename);
 /*

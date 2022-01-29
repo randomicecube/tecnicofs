@@ -214,7 +214,7 @@ void case_mount(char *request) {
     int tx;
     printf("[INFO]: Mounting...\n");
     printf("Request's size: %lu\n", strlen(request));
-    memcpy(client_pipename, request + sizeof(char), sizeof(char) * BUFFER_SIZE);
+    memcpy(client_pipename, request + 1, sizeof(char) * BUFFER_SIZE);
     printf("before anything, client_pipename: %s\n", client_pipename);
     printf("[INFO]: Pipe's length: %lu\n", strlen(client_pipename));
     printf("[INFO]: Mounting %s\n", client_pipename);
@@ -234,7 +234,7 @@ void case_mount(char *request) {
 void case_unmount(char *request) {
     // TODO - do we need to unlink the client pipe after it is closed? 
     int session_id;
-    memcpy(&session_id, request + sizeof(char), sizeof(int));
+    memcpy(&session_id, request + 1, sizeof(int));
     if (close(clients[session_id - 1].tx) != 0) {
         fprintf(stderr, "[ERR]: close failed: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
@@ -253,9 +253,9 @@ void case_open(char *request) {
     printf("before session_id, filename, flags\n");
     memcpy(&session_id, request + 1, sizeof(int));
     printf("session_id: %d\n", session_id);
-    memcpy(&flags, request + 1 + session_id, sizeof(int));
+    memcpy(&flags, request + 1 + sizeof(int), sizeof(int));
     printf("flags: %d\n", flags);
-    memcpy(filename, request + 1 + session_id + flags, sizeof(char) * BUFFER_SIZE);
+    memcpy(filename, request + 1 + 2 * sizeof(int), sizeof(char) * BUFFER_SIZE);
     printf("filename: %s\n", filename);
     filename_length = (ssize_t) strlen(filename);
     for (ssize_t i = filename_length; i < BUFFER_SIZE - 1; i++) {
@@ -272,8 +272,8 @@ void case_open(char *request) {
 
 void case_close(char *request) {
     int session_id, fhandle;
-    memcpy(&session_id, request + sizeof(char), sizeof(int));
-    memcpy(&fhandle, request + sizeof(int), sizeof(int));
+    memcpy(&session_id, request + 1, sizeof(int));
+    memcpy(&fhandle, request + 1 + sizeof(int), sizeof(int));
     int tfs_ret_int = tfs_close(fhandle);
     send_msg_int(clients[session_id - 1].tx, tfs_ret_int);
 }
@@ -283,9 +283,9 @@ void case_write(char *request) {
     size_t len;
     char *buffer;
     ssize_t tfs_ret_ssize_t;
-    memcpy(&session_id, request + sizeof(char), sizeof(int));
-    memcpy(&fhandle, request + sizeof(int), sizeof(int));
-    memcpy(&len, request + sizeof(int), sizeof(size_t));
+    memcpy(&session_id, request + 1, sizeof(int));
+    memcpy(&fhandle, request + 1 + sizeof(int), sizeof(int));
+    memcpy(&len, request + 1 + 2 * sizeof(int), sizeof(size_t));
     buffer = malloc(sizeof(char) * len);
     if (buffer == NULL) {
         fprintf(stderr, "[ERR]: malloc failed: %s\n", strerror(errno));
@@ -304,9 +304,9 @@ void case_read(char *request) {
     size_t len;
     char *buffer;
     ssize_t tfs_ret_ssize_t;
-    memcpy(&session_id, request + sizeof(char), sizeof(int));
-    memcpy(&fhandle, request + sizeof(int), sizeof(int));
-    memcpy(&len, request + sizeof(int), sizeof(size_t));
+    memcpy(&session_id, request + 1, sizeof(int));
+    memcpy(&fhandle, request + 1 + sizeof(int), sizeof(int));
+    memcpy(&len, request + 1 + 2 * sizeof(int), sizeof(size_t));
     buffer = malloc(sizeof(char) * len);
     if (buffer == NULL) {
         fprintf(stderr, "[ERR]: malloc failed: %s\n", strerror(errno));
@@ -321,7 +321,7 @@ void case_read(char *request) {
 
 void case_shutdown(char *request) {
     int session_id, tfs_ret_int;
-    memcpy(&session_id, request + sizeof(char), sizeof(int));
+    memcpy(&session_id, request + 1, sizeof(int));
     tfs_ret_int = tfs_destroy_after_all_closed();
     send_msg_int(clients[session_id - 1].tx, tfs_ret_int);
 }
