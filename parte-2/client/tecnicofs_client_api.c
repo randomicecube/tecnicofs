@@ -34,27 +34,33 @@ int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
         return -1;
     }
 
-    char server_request[MAX_REQUEST_SIZE];
+    char server_request[
+        sizeof(char) + BUFFER_SIZE * sizeof(char)
+    ];
     char op_code = TFS_OP_CODE_MOUNT;
     memcpy(server_request, &op_code, sizeof(char));
-    memset(server_request + op_code, '\0', sizeof(char) * BUFFER_SIZE);
-    memcpy(server_request + op_code, client_pipe_path,
+    memset(server_request + 1, '\0', sizeof(char) * BUFFER_SIZE);
+    memcpy(server_request + 1, client_pipe_path,
            sizeof(char) * strlen(client_pipe_path));
 
     // TODO -> WRITE ALL 40 BYTES, INCLUDING \0
     if (send_msg(client.tx, server_request, strlen(server_request)) == -1) {
         return -1;
     }
+    // clear the buffer
+    // memset(server_request, '\0', sizeof(char) * MAX_REQUEST_SIZE);
 
     read(client.rx, &client.session_id, sizeof(int));
     return 0;
 }
 
 int tfs_unmount() {
-    char server_request[MAX_REQUEST_SIZE];
+    char server_request[
+        sizeof(char) + sizeof(int)
+    ];
     char op_code = TFS_OP_CODE_UNMOUNT;
     memcpy(server_request, &op_code, sizeof(char));
-    memcpy(server_request + op_code, &client.session_id, sizeof(int));
+    memcpy(server_request + 1, &client.session_id, sizeof(int));
     
     if (send_msg(client.tx, server_request, strlen(server_request)) == -1) {
         return -1;
@@ -77,20 +83,22 @@ int tfs_unmount() {
 
 int tfs_open(char const *name, int flags) {
     int ack;
-    char server_request[MAX_REQUEST_SIZE];
+    char server_request[
+        sizeof(char) + 2 * sizeof(int) + sizeof(char) * BUFFER_SIZE
+    ];
     char op_code = TFS_OP_CODE_OPEN;
     printf("[INFO]: Starting open procedures in client API\n");
     memcpy(server_request, &op_code, sizeof(char));
-    printf("strlen(server_request) is %ld\n", strlen(server_request));
-    printf("server_request is %s\n", server_request);
-    memcpy(server_request + op_code, &client.session_id, sizeof(int));
-    printf("strlen(server_request) is %ld\n", strlen(server_request));
-    printf("server_request is %s\n", server_request);
-    memcpy(server_request + op_code + client.session_id, &flags, sizeof(int));
-    printf("strlen(server_request) is %ld\n", strlen(server_request));
-    printf("server_request is %s\n", server_request);
-    memset(server_request + op_code + client.session_id + flags, '\0', sizeof(char) * BUFFER_SIZE);
-    memcpy(server_request + op_code + client.session_id + flags, name, sizeof(char) * strlen(name));
+    // printf("strlen(server_request) is %ld\n", strlen(server_request));
+    // printf("server_request is %s\n", server_request);
+    memcpy(server_request + 1, &client.session_id, sizeof(int));
+    // printf("strlen(server_request) is %ld\n", strlen(server_request));
+    // printf("server_request is %s\n", server_request);
+    memcpy(server_request + 1 + sizeof(int), &flags, sizeof(int));
+    // printf("strlen(server_request) is %ld\n", strlen(server_request));
+    // printf("server_request is %s\n", server_request);
+    memset(server_request + 1 + 2 * sizeof(int), '\0', sizeof(char) * BUFFER_SIZE);
+    memcpy(server_request + 1 + 2 * sizeof(int), name, sizeof(char) * strlen(name));
     printf("strlen(server_request) is %ld\n", strlen(server_request));
     printf("server_request is %s\n", server_request);
     printf("[INFO]: open %s\n", name);
@@ -107,12 +115,14 @@ int tfs_open(char const *name, int flags) {
 
 int tfs_close(int fhandle) {
     int ret;
-    char server_request[MAX_REQUEST_SIZE];
+    char server_request[
+        sizeof(char) + 2 * sizeof(int)
+    ];
     char op_code = TFS_OP_CODE_CLOSE;
     memcpy(server_request, &op_code, sizeof(char));
-    memcpy(server_request + sizeof(char), &client.session_id,
+    memcpy(server_request + 1, &client.session_id,
            sizeof(int));
-    memcpy(server_request + sizeof(int), &fhandle, sizeof(int));
+    memcpy(server_request + 1 + sizeof(int), &fhandle, sizeof(int));
 
     if (send_msg(client.tx, server_request, strlen(server_request)) == -1) {
         return -1;
@@ -125,14 +135,16 @@ int tfs_close(int fhandle) {
 
 ssize_t tfs_write(int fhandle, void const *buffer, size_t len) {
     ssize_t ret;
-    char server_request[MAX_REQUEST_SIZE];
+    char server_request[
+        sizeof(char) + 2 * sizeof(int) + sizeof(char) * len + sizeof(size_t)
+    ];
     char op_code = TFS_OP_CODE_WRITE;
     memcpy(server_request, &op_code, sizeof(char));
-    memcpy(server_request + sizeof(char), &client.session_id,
+    memcpy(server_request + 1, &client.session_id,
            sizeof(int));
-    memcpy(server_request + sizeof(int), &fhandle, sizeof(int));
-    memcpy(server_request + sizeof(int), &len, sizeof(size_t));
-    memcpy(server_request + sizeof(size_t), buffer, sizeof(char) * len);
+    memcpy(server_request + 1 + sizeof(int), &fhandle, sizeof(int));
+    memcpy(server_request + 1 + 2 * sizeof(int), &len, sizeof(size_t));
+    memcpy(server_request + 1 + 2 * sizeof(int) + sizeof(size_t), buffer, sizeof(char) * len);
 
     if (send_msg(client.tx, server_request, strlen(server_request)) == -1) {
         return -1;
@@ -148,13 +160,15 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t len) {
 
 ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
     ssize_t ret;
-    char server_request[MAX_REQUEST_SIZE];
+    char server_request[
+        sizeof(char) + 2 * sizeof(int) + sizeof(size_t)
+    ];
     char op_code = TFS_OP_CODE_READ;
     memcpy(server_request, &op_code, sizeof(char));
-    memcpy(server_request + sizeof(char), &client.session_id,
+    memcpy(server_request + 1, &client.session_id,
            sizeof(int));
-    memcpy(server_request + sizeof(int), &fhandle, sizeof(int));
-    memcpy(server_request + sizeof(int), &len, sizeof(size_t));
+    memcpy(server_request + 1 + sizeof(int), &fhandle, sizeof(int));
+    memcpy(server_request + 1 + 2 * sizeof(int), &len, sizeof(size_t));
 
     // todo - send back buffer
     if (send_msg(client.tx, server_request, strlen(server_request)) == -1) {
@@ -172,10 +186,12 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
 
 int tfs_shutdown_after_all_closed() {
     int shutdown_ack;
-    char server_request[MAX_REQUEST_SIZE];
+    char server_request[
+        sizeof(char) + sizeof(int)
+    ];
     char op_code = TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED;
     memcpy(server_request, &op_code, sizeof(char));
-    memcpy(server_request + sizeof(char), &client.session_id,
+    memcpy(server_request + 1, &client.session_id,
            sizeof(int));
 
     if (send_msg(client.tx, server_request, strlen(server_request)) == -1) {
@@ -200,22 +216,6 @@ int send_msg(int tx, char *request, size_t len){
 int read_msg(int rx, char *response){
     ssize_t ret;
     ret = read(rx, response, sizeof(char) * strlen(response));
-    return check_errors_read(ret);
-}
-
-int read_msg_pipename(int rx, char* pipename) {
-    ssize_t ret;
-    ret = read(rx, pipename, sizeof(char) * BUFFER_SIZE - 1);
-    check_errors_read(ret);
-    for (ssize_t i = ret; i < BUFFER_SIZE; i++) {
-        pipename[i] = '\0';
-    }
-    return 0;
-}
-
-int read_msg_str(int rx, char *buffer, size_t len) {
-    ssize_t ret; 
-    ret = read(rx, buffer, sizeof(char) * len);
     return check_errors_read(ret);
 }
 
