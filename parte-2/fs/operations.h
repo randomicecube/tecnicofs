@@ -176,31 +176,31 @@ void case_mount(int rx);
 /*
  * Performs the bridge between server and client in the tfs_unmount operation
  */
-void case_unmount(int rx);
+void case_unmount(Pipe_men message);
 
 /*
  * Performs the bridge between server and client in the tfs_open operation
  */
-void case_open(int rx);
+void case_open(Pipe_men message);
 
 /*
  * Performs the bridge between server and client in the tfs_close operation
  */
-void case_close(int rx);
+void case_close(Pipe_men message);
 
 /*
  * Performs the bridge between server and client in the tfs_write operation
  */
-void case_write(int rx);
+void case_write(Pipe_men message);
 
 /*
  * Performs the bridge between server and client in the tfs_read operation
  */
-void case_read(int rx);
+void case_read(Pipe_men message);
 
 /*
  * Performs the bridge between server and client in the tfs_shutdown operation
  */
-void case_shutdown(int rx);
+void case_shutdown(Pipe_men message);
 
 #endif // OPERATIONS_H

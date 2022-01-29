@@ -20,23 +20,6 @@ typedef struct Client {
     char *pipename;
 } Client;
 
-typedef struct Pipe_men {
-    int session_id;
-    
-    char opcode;
-    
-    char *name;
-    
-    int flags;
-    
-    int fhandle;
-    
-    size_t len;
-    
-    char *buffer;
-
-} Pipe_men;
-
 int next_session_id = 1;
 Client clients[MAX_CLIENTS];
 
@@ -79,7 +62,6 @@ int main(int argc, char **argv) {
     do {
         Pipe_men message;
         printf("Actively waiting for a message...\n");
-        printf("rx is %d\n", rx);
         ret = read(rx, &message, sizeof(Pipe_men));
         op_code = message.opcode;
         printf("Message received.\n");
@@ -108,32 +90,32 @@ int main(int argc, char **argv) {
                 break;
             case TFS_OP_CODE_UNMOUNT:
                 printf("[INFO]: Received TFS_OP_CODE_UNMOUNT\n");
-                case_unmount(rx);
+                case_unmount(message);
                 printf("[INFO]: Unmounted\n");
                 break;
             case TFS_OP_CODE_OPEN:
                 printf("[INFO]: Received TFS_OP_CODE_OPEN\n");
-                case_open(rx);
+                case_open(message);
                 printf("[INFO]: Opened\n");
                 break;
             case TFS_OP_CODE_CLOSE:
                 printf("[INFO]: Received TFS_OP_CODE_CLOSE\n");
-                case_close(rx);
+                case_close(message);
                 printf("[INFO]: Closed\n");
                 break;
             case TFS_OP_CODE_WRITE:
                 printf("[INFO]: Received TFS_OP_CODE_WRITE\n");
-                case_write(rx);
+                case_write(message);
                 printf("[INFO]: Wrote\n");
                 break;
             case TFS_OP_CODE_READ:
                 printf("[INFO]: Received TFS_OP_CODE_READ\n");
-                case_read(rx);
+                case_read(message);
                 printf("[INFO]: Read\n");
                 break;
             case TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED:
                 printf("[INFO]: Received TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED\n");
-                case_shutdown(rx);
+                case_shutdown(message);
                 printf("[INFO]: Shut down\n");
                 shutting_down = true;
                 break;
@@ -237,24 +219,22 @@ void case_mount(int rx) {
     char client_pipename[BUFFER_SIZE];
     int tx;
     Pipe_men message;
-    puts("brah");
+    printf("[INFO]AAAA\n");
     read_msg_pipename(rx, client_pipename);
+    printf("[DBHUB");
     pipename_length = (ssize_t) strlen(client_pipename);
-    printf("tf\n");
     for (ssize_t i = pipename_length; i < BUFFER_SIZE - 1; i++) {
         client_pipename[i] = '\0';
     }
-    printf("server1\n");
+    printf("[INFO]: Mounting %s\n", client_pipename);
     tx = open(client_pipename, O_WRONLY);
-    printf("%s\n", client_pipename);
+    printf("[INFO]: Opened %s\n", client_pipename);
     if (tx == -1) {
         fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
-    printf("server2\n");
     message.session_id = next_session_id;
     send_msg(tx, message);
-    printf("server3\n");
     clients[next_session_id - 1].tx = tx;
     clients[next_session_id - 1].rx = rx;
     clients[next_session_id - 1].session_id = next_session_id;
@@ -262,11 +242,9 @@ void case_mount(int rx) {
     next_session_id++;
 }
 
-void case_unmount(int rx) {
+void case_unmount(Pipe_men message) {
     // TODO - do we need to unlink the client pipe after it is closed? 
-    Pipe_men message;
     int session_id;
-    read_msg(rx, &message);
     session_id = message.session_id;
     if (close(clients[session_id - 1].tx) != 0) {
         fprintf(stderr, "[ERR]: close failed: %s\n", strerror(errno));
@@ -283,44 +261,43 @@ void case_unmount(int rx) {
     }
 }
 
-void case_open(int rx) {
-    Pipe_men message;
+void case_open(Pipe_men message) {
     int session_id, flags;
     char filename[BUFFER_SIZE];
     ssize_t filename_length;
-    read_msg(rx, &message);
+    printf("message.session_id is %d\n", message.session_id);
     session_id = message.session_id;
     flags = message.flags;
+    printf("sabi\n");
+    printf("message.name's length: %ld\n", strlen(message.name));
+    printf("apartamento\n");
     strcpy(filename, message.name);
     filename_length = (ssize_t) strlen(filename);
     for (ssize_t i = filename_length; i < BUFFER_SIZE - 1; i++) {
         filename[i] = '\0';
     }
+    printf("looking for -%s-\n", filename);
+    printf("[INFO] just before tfs_open\n");
     int call_ret = tfs_open(filename, flags);
-    printf("[INFO]: tfs_open returned %d\n", call_ret);
-    printf("[INFO]: Opened %s\n", filename);
+    printf("[INFO] just after tfs_open\n");
+    printf("Call ret is %d\n", call_ret);
     send_msg_int(clients[session_id - 1].tx, call_ret);
+    printf("[INFO] after sending int\n");
 }
 
-void case_close(int rx) {
+void case_close(Pipe_men message) {
     int session_id, fhandle;
-    Pipe_men message;
-
-    read_msg(rx, &message);
     session_id = message.session_id;
     fhandle = message.fhandle;
-
     int tfs_ret_int = tfs_close(fhandle);
     send_msg_int(clients[session_id - 1].tx, tfs_ret_int);
 }
 
-void case_write(int rx) {
+void case_write(Pipe_men message) {
     int session_id, fhandle;
     size_t len;
     char *buffer;
     ssize_t tfs_ret_ssize_t;
-    Pipe_men message;
-    read_msg(rx, &message);
     session_id = message.session_id;
     fhandle = message.fhandle;
     len = message.len;
@@ -330,18 +307,18 @@ void case_write(int rx) {
         exit(EXIT_FAILURE);
     }
     strcpy(buffer, message.buffer);
+    printf("Trying to write %zu\n", len);
     tfs_ret_ssize_t = tfs_write(fhandle, buffer, len);
+    printf("[INFO] tfs_write returned %ld\n", tfs_ret_ssize_t);
     send_msg_ssize_t(clients[session_id - 1].tx, tfs_ret_ssize_t);
     free(buffer);
 }
 
-void case_read(int rx) {
+void case_read(Pipe_men message) {
     int session_id, fhandle;
     size_t len;
     char *buffer;
     ssize_t tfs_ret_ssize_t;
-    Pipe_men message;
-    read_msg(rx, &message);
     session_id = message.session_id;
     fhandle = message.fhandle;
     len = message.len;
@@ -350,17 +327,14 @@ void case_read(int rx) {
         fprintf(stderr, "[ERR]: malloc failed: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
-    printf("len is %zu\n", len);
+    printf("Trying to read %ld bytes\n", len);
     tfs_ret_ssize_t = tfs_read(fhandle, buffer, len);
-    printf("tfs_ret_ssize_t is %zd\n", tfs_ret_ssize_t);
     send_msg_ssize_t(clients[session_id - 1].tx, tfs_ret_ssize_t);
     free(buffer);
 }
 
-void case_shutdown(int rx) {
+void case_shutdown(Pipe_men message) {
     int session_id, tfs_ret_int;
-    Pipe_men message;
-    read_msg(rx, &message);
     session_id = message.session_id;
     tfs_ret_int = tfs_destroy_after_all_closed();
     send_msg_int(clients[session_id - 1].tx, tfs_ret_int);

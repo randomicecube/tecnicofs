@@ -2,7 +2,7 @@
 #define STATE_H
 
 #include "config.h"
-
+#include "../common/common.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -36,6 +36,16 @@ typedef struct {
     int of_inumber;
     size_t of_offset;
 } open_file_entry_t;
+
+typedef struct Pipe_men {
+    int session_id;    
+    char opcode;    
+    char name[BUFFER_SIZE];
+    int flags;
+    int fhandle;
+    size_t len;
+    char buffer[BUFFER_SIZE];
+} Pipe_men;
 
 #define MAX_DIR_ENTRIES (BLOCK_SIZE / sizeof(dir_entry_t))
 

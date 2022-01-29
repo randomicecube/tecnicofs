@@ -13,24 +13,20 @@
 Client client; // each client is singular for each process
 
 int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
-    printf("Olá\n");
     if (unlink(client_pipe_path) != 0 && errno != ENOENT) {
         fprintf(stderr, "[ERR]: unlink(%s) failed: %s\n", client_pipe_path,
                 strerror(errno));
         return -1;
     }
-    printf("Olá2\n");
     if (mkfifo(client_pipe_path, 0640) != 0) {
         fprintf(stderr, "[ERR]: mkfifo failed: %s\n", strerror(errno));
         return -1;
     }
-    printf("Olá3\n");
     client.rx = open(client_pipe_path, O_RDWR);
     if (client.rx == -1) {
         fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
         return -1;
     }
-    printf("Olá4\n");
     client.tx = open(server_pipe_path, O_WRONLY);
 
     if (client.tx == -1) {
@@ -41,33 +37,28 @@ int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
     Pipe_men message;
     message.opcode = TFS_OP_CODE_MOUNT;
 
+    printf("sending message\n");
     if (send_msg(client.tx, message) == -1) {
         return -1;
     }
 
+    printf("After message, before pipe");
     if (send_msg_str(client.tx, client_pipe_path) == -1){
         return -1;
     }
+    printf("After pipe");
 
-    printf("Olá5\n");
-    printf("Adeus\n");
     // the server returns the session id
-    ssize_t ret = read(client.rx, &message, sizeof(Pipe_men));
-    printf("Wiskas saketas\n");
-    if (ret == -1) {
-        fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
-        return -1;
-    }
+    read_msg(client.rx, &message);
     client.session_id = message.session_id;
 
-    printf("Olá6\n");
     strcpy(client.pipename, client_pipe_path);
     return 0;
 }
 
 int tfs_unmount() {
     Pipe_men message;
-    message.opcode = TFS_OP_CODE_MOUNT;
+    message.opcode = TFS_OP_CODE_UNMOUNT;
     message.session_id = client.session_id;
     
     if (send_msg(client.tx, message) == -1) {
@@ -91,32 +82,23 @@ int tfs_unmount() {
 
 int tfs_open(char const *name, int flags) {
     int ack;
-
-    char *buffer = malloc(sizeof(char) * (1024));
-
     Pipe_men message;
-    message.opcode = TFS_OP_CODE_MOUNT;
+    message.opcode = TFS_OP_CODE_OPEN;
     message.session_id = client.session_id;
-    message.name = malloc(sizeof(char)*40);
     strcpy(message.name, name);
+    printf("strlen(name) = %zu\n", strlen(name));
+    printf("message.name is -%s-\n", message.name);
     message.flags = flags;
-
-
-    if (buffer == NULL) {
-        fprintf(stderr, "[ERR]: malloc failed: %s\n", strerror(errno));
-        return -1;
-    }
-    
+    printf("[INFO]: open %s\n", name);
     if (send_msg(client.tx, message) == -1){
         return -1;
     }
+    printf("[INFO]: open sent\n");
 
     if (read_msg_int(client.rx, &ack) == -1) {
         return -1;
     }
     printf("never gets here\n");
-    free(buffer);
-    free(message.name);
     return ack;
 }
 
@@ -124,7 +106,7 @@ int tfs_close(int fhandle) {
     int ret;
 
     Pipe_men message;
-    message.opcode = TFS_OP_CODE_MOUNT;
+    message.opcode = TFS_OP_CODE_CLOSE;
     message.session_id = client.session_id;
     message.fhandle = fhandle;
 
@@ -141,12 +123,12 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t len) {
     ssize_t ret;
 
     Pipe_men message;
-    message.opcode = TFS_OP_CODE_MOUNT;
+    message.opcode = TFS_OP_CODE_WRITE;
     message.session_id = client.session_id;
-    message.fhandle = fhandle;
     message.len = len;
-    message.buffer = malloc(sizeof(char)*len);
+    message.fhandle = fhandle;
     strcpy(message.buffer, buffer);
+    printf("sending %zu bytes\n", message.len);
 
     if (send_msg(client.tx, message) == -1) {
         return -1;
@@ -155,7 +137,8 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t len) {
     if (read_msg_ssize_t(client.rx, &ret) == -1) {
         return -1;
     }
-    free(message.buffer);
+    printf("[INFO]: write %zu bytes\n", ret);
+    printf("[INFO]: Checking again: %zu\n", ret);
     return ret;
 }
 
@@ -163,11 +146,10 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
     ssize_t ret;
 
     Pipe_men message;
-    message.opcode = TFS_OP_CODE_MOUNT;
+    message.opcode = TFS_OP_CODE_READ;
     message.session_id = client.session_id;
     message.fhandle = fhandle;
     message.len = len;
-    message.buffer = malloc(sizeof(char)*len);
     strcpy(message.buffer, buffer); // NAO SEI SE ISTO ESTA BEM
 
     if (send_msg(client.tx, message) == -1) {
@@ -177,7 +159,6 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
     if (read_msg_ssize_t(client.rx, &ret) == -1) {
         return -1;
     }
-    free(message.buffer);
     return ret;
 }
 
@@ -185,7 +166,7 @@ int tfs_shutdown_after_all_closed() {
     int shutdown_ack;
 
     Pipe_men message;
-    message.opcode = TFS_OP_CODE_MOUNT;
+    message.opcode = TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED;
     message.session_id = client.session_id;
 
     if (send_msg(client.tx, message) == -1) {
@@ -201,7 +182,11 @@ int tfs_shutdown_after_all_closed() {
 
 int send_msg(int tx, Pipe_men message){
     ssize_t ret;
-    ret = write(tx, &message, sizeof(Pipe_men));
+    ssize_t bytes_to_be_written = sizeof(Pipe_men);
+    while (bytes_to_be_written > 0) {
+        ret = write(tx, &message, sizeof(Pipe_men));
+        bytes_to_be_written -= ret;
+    }
     return check_errors_write(ret);
 }
 
@@ -240,7 +225,11 @@ int send_msg_pipename(int tx, char* pipename) {
 
 int read_msg(int rx, Pipe_men *message){
     ssize_t ret;
-    ret = read(rx, message, sizeof(Pipe_men));
+    ssize_t bytes_to_be_read = sizeof(Pipe_men);
+    while (bytes_to_be_read > 0) {
+        ret = read(rx, message, sizeof(Pipe_men));
+        bytes_to_be_read -= ret;
+    }
     return check_errors_read(ret);
 }
 

@@ -24,7 +24,7 @@ typedef struct Pipe_men {
 
     char opcode;
 
-    char *name;
+    char name[BUFFER_SIZE];
 
     int flags;
     
@@ -32,7 +32,7 @@ typedef struct Pipe_men {
     
     size_t len;
     
-    char *buffer;
+    char buffer[BUFFER_SIZE];
 
 } Pipe_men;
 
@@ -169,6 +169,8 @@ int read_msg_str(int rx, char *buffer, size_t len);
  * Returns 0 if successful.
  */
 int read_msg_pipename(int rx, char *pipename);
+
+int read_msg(int rx, Pipe_men *message);
 
 /*
  * Reads an int from a pipe
