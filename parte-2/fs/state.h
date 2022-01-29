@@ -37,16 +37,6 @@ typedef struct {
     size_t of_offset;
 } open_file_entry_t;
 
-typedef struct Pipe_men {
-    int session_id;    
-    char opcode;    
-    char name[BUFFER_SIZE];
-    int flags;
-    int fhandle;
-    size_t len;
-    char buffer[BUFFER_SIZE];
-} Pipe_men;
-
 #define MAX_DIR_ENTRIES (BLOCK_SIZE / sizeof(dir_entry_t))
 
 void lock_mutex(pthread_mutex_t *mutex);

@@ -20,5 +20,6 @@ enum {
 };
 
 #define BUFFER_SIZE (40)
+#define MAX_REQUEST_SIZE (1024)
 
 #endif /* COMMON_H */
