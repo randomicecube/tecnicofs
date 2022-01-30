@@ -87,7 +87,7 @@ int tfs_open(char const *name, int flags) {
     memcpy(server_request + 1 + sizeof(int), &flags, sizeof(int));
     memset(server_request + 1 + 2 * sizeof(int), '\0', sizeof(char) * BUFFER_SIZE);
     memcpy(server_request + 1 + 2 * sizeof(int), name, sizeof(char) * strlen(name));
-    if (write(client.tx, server_request, sizeof(server_request)) == -1){
+    if (write(client.tx, server_request, sizeof(server_request)) == -1) {
         return -1;
     }
     if (read(client.rx, &ret, sizeof(int)) == -1) {
