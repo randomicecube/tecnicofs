@@ -108,8 +108,11 @@ int tfs_open(char const *name, int flags) {
     printf("[INFO]: open sent\n");
 
     if (read_msg_int(client.rx, &ack) == -1) {
+        puts("here");
         return -1;
     }
+    puts("tf");
+    printf("ack is %d\n", ack);
     return ack;
 }
 
@@ -169,17 +172,21 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
     memcpy(server_request + 1 + sizeof(int), &fhandle, sizeof(int));
     memcpy(server_request + 1 + 2 * sizeof(int), &len, sizeof(size_t));
 
+    puts("carmel");
     // todo - send back buffer
     if (write(client.tx, server_request, sizeof(server_request)) == -1) {
         return -1;
     }
+    puts("abd");
 
     if (read_msg_ssize_t(client.rx, &ret) == -1) {
         return -1;
     }
+    puts("lol");
     if (read_msg(client.rx, buffer) == -1) {
         return -1;
     }
+    puts("aqui");
     return ret;
 }
 

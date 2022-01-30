@@ -235,6 +235,7 @@ int add_dir_entry(int inumber, int sub_inumber, char const *sub_name) {
 
     insert_delay(); // simulate storage access delay to i-node with inumber
     if (inode_table[inumber].i_node_type != T_DIRECTORY) {
+        puts("b");
         return -1;
     }
 
