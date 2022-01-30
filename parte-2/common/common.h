@@ -19,7 +19,15 @@ enum {
     TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED = 7
 };
 
+typedef struct Client {
+    int rx;
+    int tx;
+    int session_id;
+    char *pipename;
+} Client;
+
 #define BUFFER_SIZE (40)
 #define MAX_REQUEST_SIZE (1024)
+#define MAX_CLIENTS (64)
 
 #endif /* COMMON_H */

@@ -3,6 +3,9 @@
 #include <stdio.h>
 #include <string.h>
 
+#define GRN "\x1B[32m"
+#define RESET "\x1B[0m"
+
 /*  This test is similar to test1.c from the 1st exercise.
     The main difference is that this one explores the
     client-server architecture of the 2nd exercise. */
@@ -32,8 +35,6 @@ int main(int argc, char **argv) {
     assert(f != -1);
 
     r = tfs_write(f, str, strlen(str));
-    printf("r is %ld\n", r);
-    printf("strlen(str) is %ld\n", strlen(str));
     assert(r == strlen(str));
 
     assert(tfs_close(f) != -1);
@@ -41,10 +42,7 @@ int main(int argc, char **argv) {
     f = tfs_open(path, 0);
     assert(f != -1);
 
-    printf("going to read\n");
     r = tfs_read(f, buffer, sizeof(buffer) - 1);
-    printf("r is %ld\n", r);
-    printf("strlen(str) is %ld\n", strlen(str));
     assert(r == strlen(str));
 
     buffer[r] = '\0';
@@ -54,7 +52,7 @@ int main(int argc, char **argv) {
 
     assert(tfs_unmount() == 0);
 
-    printf("Successful test.\n");
+    printf(GRN "Successful test.\n" RESET);
 
     return 0;
 }
