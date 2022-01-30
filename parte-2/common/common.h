@@ -26,8 +26,21 @@ typedef struct Client {
     char *pipename;
 } Client;
 
-#define BUFFER_SIZE (40)
-#define MAX_REQUEST_SIZE (1024)
+/*
+ * 2048 is used because
+ * - we need to be able to read at least a block's worth (1024) for tfs_write
+ * - we also need to account for the rest of the message's content
+ * together, they won't exceed 2048
+ * the number itself had to be above 1024, was used because it is the
+ * next base 2 exponential number
+ */
+#define MAX_REQUEST_SIZE (2048)
+/*
+ * 64 is an arbitrary number, we chose it because of it being a
+ * base 2 exponential number which is also pretty-ish
+ */
 #define MAX_CLIENTS (64)
+
+#define BUFFER_SIZE (40)
 
 #endif /* COMMON_H */
