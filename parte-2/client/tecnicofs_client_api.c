@@ -40,8 +40,7 @@ int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
     char op_code = TFS_OP_CODE_MOUNT;
     memcpy(server_request, &op_code, sizeof(char));
     memset(server_request + 1, '\0', sizeof(char) * BUFFER_SIZE);
-    memcpy(server_request + 1, client_pipe_path,
-           sizeof(char) * strlen(client_pipe_path));
+    memcpy(server_request + 1, client_pipe_path, sizeof(char) * strlen(client_pipe_path));
 
     // TODO -> WRITE ALL 40 BYTES, INCLUDING \0
     if (write(client.tx, server_request, sizeof(server_request)) == -1) {
@@ -103,8 +102,7 @@ int tfs_close(int fhandle) {
     ];
     char op_code = TFS_OP_CODE_CLOSE;
     memcpy(server_request, &op_code, sizeof(char));
-    memcpy(server_request + 1, &client.session_id,
-           sizeof(int));
+    memcpy(server_request + 1, &client.session_id, sizeof(int));
     memcpy(server_request + 1 + sizeof(int), &fhandle, sizeof(int));
 
     if (write(client.tx, server_request, sizeof(server_request)) == -1) {

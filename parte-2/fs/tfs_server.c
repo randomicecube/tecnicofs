@@ -15,9 +15,10 @@
 
 typedef struct Session{
     int session_id;
+    bool is_active = false;
     pthread_mutex_t session_lock;
     pthread_cond_t session_flag;
-    // pthread_t session_t;
+    pthread_t session_t;
     char *buffer;
     int tx;
     char *pipename;
@@ -25,6 +26,7 @@ typedef struct Session{
 
 int next_session_id = 1;
 Session sessions[MAX_CLIENTS];
+bool shutting_down = false;
 
 int main(int argc, char **argv) {
     if (argc < 2) {
@@ -56,8 +58,6 @@ int main(int argc, char **argv) {
     }
 
     start_sessions();
-
-    char op_code;
     char *client_request = malloc(MAX_REQUEST_SIZE);
     if (client_request == NULL) {
         fprintf(stderr, "[ERR]: malloc failed: %s\n", strerror(errno));
@@ -65,7 +65,6 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
     ssize_t ret;
-    bool shutting_down = false;
     do {
         ret = read(rx, client_request, sizeof(char) * MAX_REQUEST_SIZE);
         if (ret == -1) {
@@ -74,7 +73,7 @@ int main(int argc, char **argv) {
             end_sessions();
             exit(EXIT_FAILURE);
         }
-        if (ret == 0) {
+        if (ret == 0) { // reached EOF (client closed pipe)
             close(rx);
             rx = open(pipename, O_RDONLY);
             if (rx == -1) {
@@ -84,50 +83,6 @@ int main(int argc, char **argv) {
                 exit(EXIT_FAILURE);
             }
             continue;
-        }
-        memcpy(&op_code, client_request, sizeof(char));
-
-        switch (op_code) {
-            // TODO - HANDLE CASE WHERE NEXT SESSION ID IS OVER 64
-            case TFS_OP_CODE_MOUNT:
-                printf("[INFO]: Received TFS_OP_CODE_MOUNT\n");
-                case_mount(client_request);
-                printf("[INFO]: Mounted\n");
-                break;
-            case TFS_OP_CODE_UNMOUNT:
-                printf("[INFO]: Received TFS_OP_CODE_UNMOUNT\n");
-                case_unmount(client_request);
-                printf("[INFO]: Unmounted\n");
-                break;
-            case TFS_OP_CODE_OPEN:
-                printf("[INFO]: Received TFS_OP_CODE_OPEN\n");
-                case_open(client_request);
-                printf("[INFO]: Opened\n");
-                break;
-            case TFS_OP_CODE_CLOSE:
-                printf("[INFO]: Received TFS_OP_CODE_CLOSE\n");
-                case_close(client_request);
-                printf("[INFO]: Closed\n");
-                break;
-            case TFS_OP_CODE_WRITE:
-                printf("[INFO]: Received TFS_OP_CODE_WRITE\n");
-                case_write(client_request);
-                printf("[INFO]: Wrote\n");
-                break;
-            case TFS_OP_CODE_READ:
-                printf("[INFO]: Received TFS_OP_CODE_READ\n");
-                case_read(client_request);
-                printf("[INFO]: Read\n");
-                break;
-            case TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED:
-                printf("[INFO]: Received TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED\n");
-                case_shutdown(client_request);
-                printf("[INFO]: Shut down\n");
-                shutting_down = true;
-                break;
-            default: 
-                fprintf(stderr, "[ERR]: Invalid op code: %d\n", op_code);
-                break;
         }
     } while(!shutting_down);
 
@@ -171,7 +126,6 @@ void case_mount(char *request) {
 }
 
 void case_unmount(char *request) {
-    // TODO - do we need to unlink the client pipe after it is closed? 
     int session_id;
     memcpy(&session_id, request + 1, sizeof(int));
     lock_mutex(&sessions[session_id-1].session_lock);
@@ -309,9 +263,14 @@ void case_shutdown(char *request) {
 
 void start_sessions() {
     for (int i = 0; i < MAX_CLIENTS; i++) {
+        sessions[i].session_id = i + 1;
         init_mutex(&sessions[i].session_lock);
         if (pthread_cond_init(&sessions[i].session_flag, NULL) != 0) {
             fprintf(stderr, "[ERR]: cond init failed: %s\n", strerror(errno));
+            exit(EXIT_FAILURE);
+        }
+        if (pthread_create(&sessions[i].session_t, NULL, thread_handler, (void *) &sessions[i]) != 0) {
+            fprintf(stderr, "[ERR]: thread create failed: %s\n", strerror(errno));
             exit(EXIT_FAILURE);
         }
     }
@@ -321,5 +280,53 @@ void end_sessions() {
     for (int i = 0; i < MAX_CLIENTS; i++) {
         pthread_mutex_destroy(&sessions[i].session_lock);
         pthread_cond_destroy(&sessions[i].session_flag);
+    }
+}
+
+/*
+ * ----------------------------------------------------------------------------
+ * Below is the thread handler function.
+ * ----------------------------------------------------------------------------
+ */
+
+void *thread_handler(void *arg) {
+    Session session = *(Session *) arg;
+    char op_code;
+    while (true) {
+        lock_mutex(&session.session_lock);
+        while (session.is_active == false) {
+            pthread_cond_wait(&session.session_flag, &session.session_lock);
+        }
+        session.is_active = true;
+        memcpy(&op_code, session.buffer, sizeof(char));
+        switch (op_code) {
+            case TFS_OP_CODE_MOUNT:
+                case_mount(session.buffer);
+                break;
+            case TFS_OP_CODE_UNMOUNT:
+                case_unmount(session.buffer);
+                break;
+            case TFS_OP_CODE_OPEN:
+                case_open(session.buffer);
+                break;
+            case TFS_OP_CODE_CLOSE:
+                case_close(session.buffer);
+                break;
+            case TFS_OP_CODE_WRITE:
+                case_write(session.buffer);
+                break;
+            case TFS_OP_CODE_READ:
+                case_read(session.buffer);
+                break;
+            case TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED:
+                case_shutdown(session.buffer);
+                shutting_down = true;
+                break;
+            default:
+                fprintf(stderr, "[ERR]: invalid request: %c\n", op_code);
+        }
+        session.is_active = false;
+        pthread_cond_signal(&session.session_flag);
+        unlock_mutex(&session.session_lock);
     }
 }
