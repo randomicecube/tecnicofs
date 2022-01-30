@@ -6,6 +6,21 @@
 #include "config.h"
 #include "state.h"
 #include <sys/types.h>
+#include <stdbool.h>
+
+/*
+ * Structure responsible for holding a given session's information.
+  */
+typedef struct Session{
+    int session_id;
+    bool is_active;
+    pthread_mutex_t session_lock;
+    pthread_cond_t session_flag;
+    pthread_t session_t;
+    char *buffer;
+    int tx;
+    char *pipename;
+} Session;
 
 /*
  * Performs the bridge between server and client in the tfs_mount operation
