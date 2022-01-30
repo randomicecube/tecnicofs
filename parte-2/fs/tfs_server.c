@@ -15,7 +15,7 @@
 
 typedef struct Session{
     int session_id;
-    bool is_active = false;
+    bool is_active;
     pthread_mutex_t session_lock;
     pthread_cond_t session_flag;
     pthread_t session_t;
@@ -58,13 +58,15 @@ int main(int argc, char **argv) {
     }
 
     start_sessions();
+
+    ssize_t ret;
+    char op_code;
     char *client_request = malloc(MAX_REQUEST_SIZE);
     if (client_request == NULL) {
         fprintf(stderr, "[ERR]: malloc failed: %s\n", strerror(errno));
         end_sessions();
         exit(EXIT_FAILURE);
     }
-    ssize_t ret;
     do {
         ret = read(rx, client_request, sizeof(char) * MAX_REQUEST_SIZE);
         if (ret == -1) {
@@ -83,6 +85,20 @@ int main(int argc, char **argv) {
                 exit(EXIT_FAILURE);
             }
             continue;
+        }
+        op_code = client_request[0];
+        if (op_code == TFS_OP_CODE_MOUNT) {
+            sessions[next_session_id - 1].buffer = client_request;
+            pthread_cond_signal(&sessions[next_session_id - 1].session_flag);
+        } else {
+            int session_id;
+            memcpy(&session_id, client_request + 1, sizeof(int));
+            if (session_id < 1 || session_id > MAX_CLIENTS) {
+                fprintf(stderr, "[ERR]: invalid session id: %d\n", session_id);
+                continue;
+            }
+            sessions[session_id - 1].buffer = client_request;
+            pthread_cond_signal(&sessions[session_id - 1].session_flag);
         }
     } while(!shutting_down);
 
@@ -264,6 +280,7 @@ void case_shutdown(char *request) {
 void start_sessions() {
     for (int i = 0; i < MAX_CLIENTS; i++) {
         sessions[i].session_id = i + 1;
+        sessions[i].is_active = false;
         init_mutex(&sessions[i].session_lock);
         if (pthread_cond_init(&sessions[i].session_flag, NULL) != 0) {
             fprintf(stderr, "[ERR]: cond init failed: %s\n", strerror(errno));
@@ -301,32 +318,45 @@ void *thread_handler(void *arg) {
         memcpy(&op_code, session.buffer, sizeof(char));
         switch (op_code) {
             case TFS_OP_CODE_MOUNT:
+                printf("[INFO]: Entering case TFS_OP_CODE_MOUNT\n");
                 case_mount(session.buffer);
+                printf("Mounted successfully\n");
                 break;
             case TFS_OP_CODE_UNMOUNT:
+                printf("[INFO]: Entering case TFS_OP_CODE_UNMOUNT\n");
                 case_unmount(session.buffer);
+                printf("Unmounted successfully\n");
                 break;
             case TFS_OP_CODE_OPEN:
+                printf("[INFO]: Entering case TFS_OP_CODE_OPEN\n");
                 case_open(session.buffer);
+                printf("Opened successfully\n");
                 break;
             case TFS_OP_CODE_CLOSE:
+                printf("[INFO]: Entering case TFS_OP_CODE_CLOSE\n");
                 case_close(session.buffer);
+                printf("Closed successfully\n");
                 break;
             case TFS_OP_CODE_WRITE:
+                printf("[INFO]: Entering case TFS_OP_CODE_WRITE\n");
                 case_write(session.buffer);
+                printf("Wrote successfully\n");
                 break;
             case TFS_OP_CODE_READ:
+                printf("[INFO]: Entering case TFS_OP_CODE_READ\n");
                 case_read(session.buffer);
+                printf("Read successfully\n");
                 break;
             case TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED:
+                printf("[INFO]: Entering case TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED\n");
                 case_shutdown(session.buffer);
+                printf("Shutdown successfully\n");
                 shutting_down = true;
                 break;
             default:
                 fprintf(stderr, "[ERR]: invalid request: %c\n", op_code);
         }
         session.is_active = false;
-        pthread_cond_signal(&session.session_flag);
         unlock_mutex(&session.session_lock);
     }
 }

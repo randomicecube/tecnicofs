@@ -55,4 +55,9 @@ void start_sessions();
   */
 void end_sessions();
 
+/*
+ * Handles the requests from the receptor thread to a worker thread
+ */
+void *thread_handler(void *arg);
+
 #endif
