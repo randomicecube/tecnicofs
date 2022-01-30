@@ -10,9 +10,21 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <pthread.h>
+
+typedef struct Session{
+    int session_id;
+    pthread_mutex_t mutex;
+    pthread_cond_t cond;
+    pthread_t thread;
+    //char *buffer;
+    int rx;
+    int tx;
+    char *pipename;
+} Session;
 
 int next_session_id = 1;
-Client clients[MAX_CLIENTS];
+Session sessions[MAX_CLIENTS];
 
 int main(int argc, char **argv) {
     if (argc < 2) {
@@ -129,33 +141,41 @@ int main(int argc, char **argv) {
 void case_mount(char *request) {
     char client_pipename[BUFFER_SIZE];
     int tx;
+    pthread_mutex_lock(&sessions[next_session_id-1].mutex);
     memcpy(client_pipename, request + 1, sizeof(char) * BUFFER_SIZE);
     tx = open(client_pipename, O_WRONLY);
     if (tx == -1) {
         fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
+        pthread_mutex_unlock(&sessions[next_session_id-1].mutex);
         exit(EXIT_FAILURE);
     }
     if (write(tx, &next_session_id, sizeof(int)) == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
+        pthread_mutex_unlock(&sessions[next_session_id-1].mutex);
         exit(EXIT_FAILURE);
     }
-    clients[next_session_id - 1].tx = tx;
-    clients[next_session_id - 1].session_id = next_session_id;
-    clients[next_session_id - 1].pipename = client_pipename;
+    sessions[next_session_id - 1].tx = tx;
+    sessions[next_session_id - 1].session_id = next_session_id;
+    sessions[next_session_id - 1].pipename = client_pipename;
+    pthread_mutex_unlock(&sessions[next_session_id-1].mutex);
     next_session_id++;
+    
 }
 
 void case_unmount(char *request) {
     // TODO - do we need to unlink the client pipe after it is closed? 
     int session_id;
     memcpy(&session_id, request + 1, sizeof(int));
-    if (close(clients[session_id - 1].tx) != 0) {
+    pthread_mutex_lock(&sessions[session_id-1].mutex);
+    if (close(sessions[session_id - 1].tx) != 0) {
         fprintf(stderr, "[ERR]: close failed: %s\n", strerror(errno));
+        pthread_mutex_unlock(&sessions[session_id-1].mutex);
         exit(EXIT_FAILURE);
     }
-    if (unlink(clients[session_id - 1].pipename) != 0 && errno != ENOENT) {
-        fprintf(stderr, "[ERR]: unlink(%s) failed: %s\n", clients[session_id - 1].pipename,
+    if (unlink(sessions[session_id - 1].pipename) != 0 && errno != ENOENT) {
+        fprintf(stderr, "[ERR]: unlink(%s) failed: %s\n", sessions[session_id - 1].pipename,
                 strerror(errno));
+        pthread_mutex_unlock(&sessions[session_id-1].mutex);
         exit(EXIT_FAILURE);
     }
 }
@@ -164,11 +184,13 @@ void case_open(char *request) {
     int session_id, flags;
     char filename[BUFFER_SIZE];
     memcpy(&session_id, request + 1, sizeof(int));
+    pthread_mutex_lock(&sessions[session_id-1].mutex);
     memcpy(&flags, request + 1 + sizeof(int), sizeof(int));
     memcpy(filename, request + 1 + 2 * sizeof(int), sizeof(char) * BUFFER_SIZE);
     int call_ret = tfs_open(filename, flags);
-    if (write(clients[session_id - 1].tx, &call_ret, sizeof(int)) == -1) {
+    if (write(sessions[session_id - 1].tx, &call_ret, sizeof(int)) == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
+        pthread_mutex_unlock(&sessions[session_id-1].mutex);
         exit(EXIT_FAILURE);
     }
 }
@@ -176,10 +198,12 @@ void case_open(char *request) {
 void case_close(char *request) {
     int session_id, fhandle;
     memcpy(&session_id, request + 1, sizeof(int));
+    pthread_mutex_lock(&sessions[session_id-1].mutex);
     memcpy(&fhandle, request + 1 + sizeof(int), sizeof(int));
     int tfs_ret_int = tfs_close(fhandle);
-    if (write(clients[session_id - 1].tx, &tfs_ret_int, sizeof(int)) == -1) {
+    if (write(sessions[session_id - 1].tx, &tfs_ret_int, sizeof(int)) == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
+        pthread_mutex_unlock(&sessions[session_id-1].mutex);
         exit(EXIT_FAILURE);
     }
 }
@@ -190,20 +214,24 @@ void case_write(char *request) {
     char *buffer;
     ssize_t tfs_ret_ssize_t;
     memcpy(&session_id, request + 1, sizeof(int));
+    pthread_mutex_lock(&sessions[session_id-1].mutex);
     memcpy(&fhandle, request + 1 + sizeof(int), sizeof(int));
     memcpy(&len, request + 1 + 2 * sizeof(int), sizeof(size_t));
     buffer = malloc(sizeof(char) * len);
     if (buffer == NULL) {
         fprintf(stderr, "[ERR]: malloc failed: %s\n", strerror(errno));
+        pthread_mutex_unlock(&sessions[session_id-1].mutex);
         exit(EXIT_FAILURE);
     }
     memcpy(buffer, request + 1 + 2 * sizeof(int) + sizeof(size_t), sizeof(char) * len);
     tfs_ret_ssize_t = tfs_write(fhandle, buffer, len);
-    if (write(clients[session_id - 1].tx, &tfs_ret_ssize_t, sizeof(ssize_t)) == -1) {
+    if (write(sessions[session_id - 1].tx, &tfs_ret_ssize_t, sizeof(ssize_t)) == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         free(buffer);
+        pthread_mutex_unlock(&sessions[session_id-1].mutex);
         exit(EXIT_FAILURE);
     }
+    pthread_mutex_unlock(&sessions[session_id-1].mutex);
     free(buffer);
 }
 
@@ -213,33 +241,41 @@ void case_read(char *request) {
     char *buffer;
     ssize_t tfs_ret_ssize_t;
     memcpy(&session_id, request + 1, sizeof(int));
+    pthread_mutex_lock(&sessions[session_id-1].mutex);
     memcpy(&fhandle, request + 1 + sizeof(int), sizeof(int));
     memcpy(&len, request + 1 + 2 * sizeof(int), sizeof(size_t));
     buffer = malloc(sizeof(char) * len);
     if (buffer == NULL) {
         fprintf(stderr, "[ERR]: malloc failed: %s\n", strerror(errno));
+        pthread_mutex_unlock(&sessions[session_id-1].mutex);
         exit(EXIT_FAILURE);
     }
     tfs_ret_ssize_t = tfs_read(fhandle, buffer, len);
-    if (write(clients[session_id - 1].tx, &tfs_ret_ssize_t, sizeof(ssize_t)) == -1) {
+    if (write(sessions[session_id - 1].tx, &tfs_ret_ssize_t, sizeof(ssize_t)) == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         free(buffer);
+        pthread_mutex_unlock(&sessions[session_id-1].mutex);
         exit(EXIT_FAILURE);
     }
-    if (write(clients[session_id - 1].tx, buffer, (size_t) tfs_ret_ssize_t) == -1) {
+    if (write(sessions[session_id - 1].tx, buffer, (size_t) tfs_ret_ssize_t) == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         free(buffer);
+        pthread_mutex_unlock(&sessions[session_id-1].mutex);
         exit(EXIT_FAILURE);
     }
+    pthread_mutex_unlock(&sessions[session_id-1].mutex);
     free(buffer);
 }
 
 void case_shutdown(char *request) {
     int session_id, tfs_ret_int;
     memcpy(&session_id, request + 1, sizeof(int));
+    pthread_mutex_lock(&sessions[session_id-1].mutex);
     tfs_ret_int = tfs_destroy_after_all_closed();
-    if (write(clients[session_id - 1].tx, &tfs_ret_int, sizeof(int)) == -1) {
+    if (write(sessions[session_id - 1].tx, &tfs_ret_int, sizeof(int)) == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
+        pthread_mutex_unlock(&sessions[next_session_id-1].mutex);
         exit(EXIT_FAILURE);
     }
+    pthread_mutex_unlock(&sessions[session_id-1].mutex);
 }
