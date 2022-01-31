@@ -57,10 +57,9 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
     do {
-        // TODO - ERROR: READING TWICE FROM THE SAME PIPE (82 VS 41)
         printf("Read request from client...\n");
-        ret = read(rx, client_request, sizeof(char) * MAX_REQUEST_SIZE);
-        printf("Just read %ld bytes from client.\n", ret);
+        ret = read(rx, &op_code, sizeof(char));
+        printf("Just read op_code from client.\n");
         if (ret == -1) {
             fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
             free(client_request);
@@ -79,8 +78,54 @@ int main(int argc, char **argv) {
             }
             continue;
         }
-        op_code = client_request[0];
         printf("Request received.\n");
+        client_request[0] = op_code;
+        switch (op_code) {
+            case TFS_OP_CODE_MOUNT:
+                printf("Mounting...\n");
+                ret = read(rx, client_request + 1, MOUNT_SIZE_SERVER);
+                printf("Just read mount request from client.\n");
+                break;
+            case TFS_OP_CODE_UNMOUNT:
+                printf("Unmounting...\n");
+                ret = read(rx, client_request + 1, UNMOUNT_SIZE_SERVER);
+                printf("Just read unmount request from client.\n");
+                break;
+            case TFS_OP_CODE_OPEN:
+                printf("Opening...\n");
+                ret = read(rx, client_request + 1, OPEN_SIZE_SERVER);
+                printf("Just read open request from client.\n");
+                break;
+            case TFS_OP_CODE_CLOSE:
+                printf("Closing...\n");
+                ret = read(rx, client_request + 1, CLOSE_SIZE_SERVER);
+                printf("Just read close request from client.\n");
+                break;
+            case TFS_OP_CODE_WRITE:
+                printf("Writing...\n");
+                size_t len;
+                // TODO VERIFY SYSCALLS
+                read(rx, client_request + 1, sizeof(int)); // session id
+                read(rx, client_request + 1 + sizeof(int), sizeof(int)); // fhandle
+                read(rx, &len, sizeof(size_t));
+                memcpy(client_request + 1 + 2 * sizeof(int), &len, sizeof(size_t));
+                read(rx, client_request + 1 + 2 * sizeof(int) + sizeof(size_t), sizeof(char) * len);
+                printf("Just read write request from client.\n");
+                break;
+            case TFS_OP_CODE_READ:
+                printf("Reading...\n");
+                ret = read(rx, client_request + 1, READ_SIZE_SERVER);
+                printf("Just read read request from client.\n");
+                break;
+            case TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED:
+                printf("Shutting down...\n");
+                ret = read(rx, client_request + 1, SHUTDOWN_SIZE_SERVER);
+                printf("Just read shutdown request from client.\n");
+                break;
+            default:
+                fprintf(stderr, "[ERR]: Invalid op_code: %d\n", op_code);
+                continue;
+        }
         if (op_code == TFS_OP_CODE_MOUNT) {
             lock_mutex(&sessions[next_session_id - 1].session_lock);
             sessions[next_session_id - 1].buffer = client_request;
@@ -103,9 +148,9 @@ int main(int argc, char **argv) {
     } while(!shutting_down);
 
     free(client_request);
-    end_sessions();
     close(rx);
     unlink(pipename);
+    end_sessions();
     return 0;
 }
 

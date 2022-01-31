@@ -5,6 +5,17 @@
 #include <sys/types.h>
 
 /*
+ * Sizes used for writing in the pipe that connects a client to the server
+ */
+#define MOUNT_SIZE_API (sizeof(char) + BUFFER_SIZE * sizeof(char))
+#define UNMOUNT_SIZE_API (sizeof(char) + sizeof(int))
+#define OPEN_SIZE_API (sizeof(char) + 2 * sizeof(int) + BUFFER_SIZE * sizeof(char))
+#define CLOSE_SIZE_API (sizeof(char) + 2 * sizeof(int))
+#define WRITE_SIZE_API(len) (sizeof(char) + 2 * sizeof(int) + sizeof(char) * len + sizeof(size_t))
+#define READ_SIZE_API (sizeof(char) + 2 * sizeof(int) + sizeof(size_t))
+#define SHUTDOWN_SIZE_API (sizeof(char) + sizeof(int))
+
+/*
  * Establishes a session with a TecnicoFS server.
  * Input:
  * - client_pipe_path: pathname of a named pipe that will be used for

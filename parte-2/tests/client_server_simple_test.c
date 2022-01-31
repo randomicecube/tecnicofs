@@ -34,7 +34,9 @@ int main(int argc, char **argv) {
     printf("File created.\n");
     assert(f != -1);
 
+    printf("Writing to file...\n");
     r = tfs_write(f, str, strlen(str));
+    printf("Wrote %ld bytes.\n", r);
     assert(r == strlen(str));
 
     assert(tfs_close(f) != -1);
