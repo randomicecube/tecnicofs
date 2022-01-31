@@ -27,10 +27,7 @@ int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
         fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
         return -1;
     }
-    printf("[LOG]: Establishing connection with server...\n");
     client.tx = open(server_pipe_path, O_WRONLY);
-    printf("[LOG]: Connection established.\n");
-    printf("tx: %d\n", client.tx);
 
     if (client.tx == -1) {
         fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
@@ -43,16 +40,12 @@ int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
     memset(server_request + 1, '\0', sizeof(char) * BUFFER_SIZE);
     memcpy(server_request + 1, client_pipe_path, sizeof(char) * strlen(client_pipe_path));
 
-    printf("[LOG]: Sending request to server...\n");
     if (write(client.tx, server_request, sizeof(server_request)) == -1) {
         return -1;
     }
-    printf("[LOG]: Request sent.\n");
-    printf("[LOG]: Waiting for response from server...\n");
     if (read(client.rx, &client.session_id, sizeof(int)) == -1) {
         return -1;
     }
-    printf("[LOG]: Response received.\n");
     return 0;
 }
 
@@ -86,17 +79,12 @@ int tfs_open(char const *name, int flags) {
     memcpy(server_request + 1 + sizeof(int), &flags, sizeof(int));
     memset(server_request + 1 + 2 * sizeof(int), '\0', sizeof(char) * BUFFER_SIZE);
     memcpy(server_request + 1 + 2 * sizeof(int), name, sizeof(char) * strlen(name));
-    printf("[LOG]: Sending request to server: TFS_OPEN...\n");
     if (write(client.tx, server_request, sizeof(server_request)) == -1) {
-        printf("[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
-    printf("[LOG]: Request sent.\n");
     if (read(client.rx, &ret, sizeof(int)) == -1) {
-        printf("[ERR]: read failed: %s\n", strerror(errno));
         return -1;
     }
-    printf("[LOG]: Response received.\n");
     return ret;
 }
 
@@ -127,17 +115,12 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t len) {
     memcpy(server_request + 1 + 2 * sizeof(int), &len, sizeof(size_t));
     memcpy(server_request + 1 + 2 * sizeof(int) + sizeof(size_t), buffer, sizeof(char) * len);
 
-    printf("[LOG]: Sending request to server: TFS_WRITE...\n");
     if (write(client.tx, server_request, sizeof(server_request)) == -1) {
-        printf("[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
-    printf("[LOG]: Request sent: TFS_WRITE.\n");
     if (read(client.rx, &ret, sizeof(ssize_t)) == -1) {
-        printf("[ERR]: read failed: %s\n", strerror(errno));
         return -1;
     }
-    printf("[LOG]: Response received: TFS_WRITE.\n");
     return ret;
 }
 
