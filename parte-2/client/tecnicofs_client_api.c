@@ -27,7 +27,10 @@ int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
         fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
         return -1;
     }
+    printf("[LOG]: Establishing connection with server...\n");
     client.tx = open(server_pipe_path, O_WRONLY);
+    printf("[LOG]: Connection established.\n");
+    printf("tx: %d\n", client.tx);
 
     if (client.tx == -1) {
         fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
@@ -43,12 +46,16 @@ int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
     memcpy(server_request + 1, client_pipe_path, sizeof(char) * strlen(client_pipe_path));
 
     // TODO -> WRITE ALL 40 BYTES, INCLUDING \0
+    printf("[LOG]: Sending request to server...\n");
     if (write(client.tx, server_request, sizeof(server_request)) == -1) {
         return -1;
     }
+    printf("[LOG]: Request sent.\n");
+    printf("[LOG]: Waiting for response from server...\n");
     if (read(client.rx, &client.session_id, sizeof(int)) == -1) {
         return -1;
     }
+    printf("[LOG]: Response received.\n");
     return 0;
 }
 

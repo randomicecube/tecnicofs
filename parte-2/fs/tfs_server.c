@@ -57,7 +57,10 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
     do {
+        // TODO - ERROR: READING TWICE FROM THE SAME PIPE (82 VS 41)
+        printf("Read request from client...\n");
         ret = read(rx, client_request, sizeof(char) * MAX_REQUEST_SIZE);
+        printf("Just read %ld bytes from client.\n", ret);
         if (ret == -1) {
             fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
             free(client_request);
@@ -65,6 +68,7 @@ int main(int argc, char **argv) {
             exit(EXIT_FAILURE);
         }
         if (ret == 0) { // reached EOF (client closed pipe)
+            printf("Client closed pipe.\n");
             close(rx);
             rx = open(pipename, O_RDONLY);
             if (rx == -1) {
@@ -76,6 +80,7 @@ int main(int argc, char **argv) {
             continue;
         }
         op_code = client_request[0];
+        printf("Request received.\n");
         if (op_code == TFS_OP_CODE_MOUNT) {
             lock_mutex(&sessions[next_session_id - 1].session_lock);
             sessions[next_session_id - 1].buffer = client_request;
@@ -128,8 +133,7 @@ void case_mount(char *request) {
     sessions[next_session_id - 1].tx = tx;
     sessions[next_session_id - 1].session_id = next_session_id;
     sessions[next_session_id - 1].pipename = client_pipename;
-    next_session_id++;
-    
+    next_session_id++;    
 }
 
 void case_unmount(char *request) {
