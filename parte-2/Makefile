@@ -45,6 +45,7 @@ else
 endif
 
 LDFLAGS = -pthread
+LDFLAGS += -fsanitize=thread
 
 # A phony target is one that is not really the name of a file
 # https://www.gnu.org/software/make/manual/html_node/Phony-Targets.html

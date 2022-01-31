@@ -127,25 +127,35 @@ int main(int argc, char **argv) {
                 continue;
         }
         if (op_code == TFS_OP_CODE_MOUNT) {
+            printf("Entered mount if...\n");
             lock_mutex(&sessions[next_session_id - 1].session_lock);
             sessions[next_session_id - 1].buffer = client_request;
             sessions[next_session_id - 1].is_active = true;
             pthread_cond_signal(&sessions[next_session_id - 1].session_flag);
             unlock_mutex(&sessions[next_session_id - 1].session_lock);
+            printf("Exited mount if...\n");
         } else {
+            printf("Entered non-mount if...\n");
             int session_id;
             memcpy(&session_id, client_request + 1, sizeof(int));
+            printf("Session id is %d\n", session_id);
             if (session_id < 1 || session_id > MAX_CLIENTS) {
                 fprintf(stderr, "[ERR]: invalid session id: %d\n", session_id);
                 continue;
             }
+            printf("Before locking session...\n");
             lock_mutex(&sessions[session_id - 1].session_lock);
             sessions[session_id - 1].buffer = client_request;
             sessions[session_id - 1].is_active = true;
+            printf("Before signaling session...\n");
             pthread_cond_signal(&sessions[session_id - 1].session_flag);
+            printf("Before unlocking session...\n");
             unlock_mutex(&sessions[session_id - 1].session_lock);
+            printf("Exited non-mount if...\n");
         }
     } while(!shutting_down);
+
+    printf("Left loop.\n");
 
     free(client_request);
     close(rx);
