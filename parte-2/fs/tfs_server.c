@@ -17,6 +17,9 @@ int next_session_id = 1;
 Session sessions[MAX_CLIENTS];
 bool shutting_down = false;
 pthread_mutex_t next_session_id_lock;
+pthread_mutex_t sessions_lock;
+
+// TODO - DEAL WITH LONG READS AND WRITES (WITH A FOR LOOP)
 
 int main(int argc, char **argv) {
     if (argc < 2) {
@@ -48,82 +51,91 @@ int main(int argc, char **argv) {
     }
 
     start_sessions();
+    signal(SIGPIPE, SIG_IGN); // TODO - is this required?
 
     ssize_t ret;
+    int session_id;
     char op_code;
+    Session *current_session;
     do {
-        char client_request[MAX_REQUEST_SIZE];
         ret = read(rx, &op_code, sizeof(char));
         if (ret == -1) {
             fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));;
-            end_sessions();
-            exit(EXIT_FAILURE);
+            continue;
         }
         if (ret == 0) { // reached EOF (client closed pipe)
             close(rx);
             rx = open(pipename, O_RDONLY);
             if (rx == -1) {
                 fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
-;
                 end_sessions();
                 exit(EXIT_FAILURE);
             }
             continue;
         }
-        memcpy(client_request, &op_code, sizeof(char));
-        switch (op_code) {
-            case TFS_OP_CODE_MOUNT:
-                ret = read(rx, client_request + 1, MOUNT_SIZE_SERVER);
-                break;
-            case TFS_OP_CODE_UNMOUNT:
-                ret = read(rx, client_request + 1, UNMOUNT_SIZE_SERVER);
-                break;
-            case TFS_OP_CODE_OPEN:
-                ret = read(rx, client_request + 1, OPEN_SIZE_SERVER);
-                break;
-            case TFS_OP_CODE_CLOSE:
-                ret = read(rx, client_request + 1, CLOSE_SIZE_SERVER);
-                break;
-            case TFS_OP_CODE_WRITE:
-                size_t len;
-                // TODO VERIFY SYSCALLS
-                read(rx, client_request + 1, sizeof(int)); // session id
-                read(rx, client_request + 1 + sizeof(int), sizeof(int)); // fhandle
-                read(rx, &len, sizeof(size_t));
-                memcpy(client_request + 1 + 2 * sizeof(int), &len, sizeof(size_t));
-                read(rx, client_request + 1 + 2 * sizeof(int) + sizeof(size_t), sizeof(char) * len);
-                break;
-            case TFS_OP_CODE_READ:
-                ret = read(rx, client_request + 1, READ_SIZE_SERVER);
-                break;
-            case TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED:
-                ret = read(rx, client_request + 1, SHUTDOWN_SIZE_SERVER);
-                break;
-            default:
-                fprintf(stderr, "[ERR]: Invalid op_code: %d\n", op_code);
-                continue;
+        if (ret == -1) { // TODO - ABSTRACTION IN THIS (READ FUNCTION)
+            fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
+            continue;
         }
         if (op_code == TFS_OP_CODE_MOUNT) {
+            printf("Received mount request.\n");
             lock_mutex(&next_session_id_lock);
-            lock_mutex(&sessions[next_session_id - 1].session_lock);
-            sessions[next_session_id - 1].buffer = client_request;
-            sessions[next_session_id - 1].is_active = true;
-            pthread_cond_signal(&sessions[next_session_id - 1].session_flag);
+            if (next_session_id > 64) {
+                fprintf(stderr, "[ERR]: Too many clients connected. Try again in a bit.\n");
+                unlock_mutex(&next_session_id_lock);
+                continue;
+            }
+            session_id = next_session_id++;
+            current_session = &sessions[session_id - 1];
+            current_session->session_id = session_id;
             unlock_mutex(&next_session_id_lock);
-            unlock_mutex(&sessions[next_session_id - 1].session_lock);
+            lock_mutex(&current_session->session_lock);
+            memcpy(current_session->buffer, &op_code, sizeof(char));
+            ret = read(rx, current_session->buffer + 1, MOUNT_SIZE_SERVER);
+            printf("Ending mount request.\n");
+            printf("Session id now is %d\n", session_id);
         } else {
-            int session_id;
-            memcpy(&session_id, client_request + 1, sizeof(int));
+            ret = read(rx, &session_id, sizeof(int));
+            if (ret == -1) {
+                fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
+                continue;
+            }
             if (session_id < 1 || session_id > MAX_CLIENTS) {
                 fprintf(stderr, "[ERR]: invalid session id: %d\n", session_id);
                 continue;
             }
-            lock_mutex(&sessions[session_id - 1].session_lock);
-            sessions[session_id - 1].buffer = client_request;
-            sessions[session_id - 1].is_active = true;
-            pthread_cond_signal(&sessions[session_id - 1].session_flag);
-            unlock_mutex(&sessions[session_id - 1].session_lock);
+            current_session = &sessions[session_id - 1];
+            lock_mutex(&current_session->session_lock);
+            memcpy(current_session->buffer, &op_code, sizeof(char));
+            memcpy(current_session->buffer + 1, &session_id, sizeof(int));
+            switch (op_code) {
+                case TFS_OP_CODE_UNMOUNT:
+                case TFS_OP_CODE_CLOSE:
+                case TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED:
+                    // cases not required - we have already read the session id
+                    break;
+                case TFS_OP_CODE_OPEN:
+                    ret = read(rx, current_session->buffer + 1 + sizeof(int), OPEN_SIZE_SERVER);
+                    break;
+                case TFS_OP_CODE_WRITE:
+                    size_t len;
+                    // TODO VERIFY SYSCALLS
+                    read(rx, current_session->buffer + 1 + sizeof(int), sizeof(int)); // fhandle
+                    read(rx, &len, sizeof(size_t));
+                    memcpy(current_session->buffer + 1 + 2 * sizeof(int), &len, sizeof(size_t));
+                    read(rx, current_session->buffer + 1 + 2 * sizeof(int) + sizeof(size_t), sizeof(char) * len);
+                    break;
+                case TFS_OP_CODE_READ:
+                    ret = read(rx, current_session->buffer + 1  + sizeof(int), READ_SIZE_SERVER);
+                    break;
+                default:
+                    fprintf(stderr, "[ERR]: Invalid op_code: %d\n", op_code);
+                    continue;
+            }
         }
+        current_session->is_active = true;
+        pthread_cond_signal(&current_session->session_flag);
+        unlock_mutex(&current_session->session_lock);
     } while(!shutting_down);
 
     close(rx);
@@ -138,54 +150,49 @@ int main(int argc, char **argv) {
  * ----------------------------------------------------------------------------
  */
 
-void case_mount(char *request) {
+void case_mount(Session *session) {
     char client_pipename[BUFFER_SIZE];
     int tx;
-    memcpy(client_pipename, request + 1, sizeof(char) * BUFFER_SIZE);
+    memcpy(client_pipename, session->buffer + 1, sizeof(char) * BUFFER_SIZE);
     tx = open(client_pipename, O_WRONLY);
     if (tx == -1) {
         fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
         end_sessions();
         exit(EXIT_FAILURE);
     }
-    if (write(tx, &next_session_id, sizeof(int)) == -1) {
+    if (write(tx, &session->session_id, sizeof(int)) == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         end_sessions();
         exit(EXIT_FAILURE);
     }
-    sessions[next_session_id - 1].tx = tx;
-    sessions[next_session_id - 1].session_id = next_session_id;
-    sessions[next_session_id - 1].pipename = client_pipename;
-    next_session_id++;
+    session->tx = tx;
+    session->pipename = client_pipename;
 }
 
-void case_unmount(char *request) {
-    int session_id;
-    memcpy(&session_id, request + 1, sizeof(int));
-    if (close(sessions[session_id - 1].tx) != 0) {
+void case_unmount(Session *session) {
+    if (close(session->tx) != 0) {
         fprintf(stderr, "[ERR]: close failed: %s\n", strerror(errno));
         end_sessions();
         exit(EXIT_FAILURE);
     }
-    if (unlink(sessions[session_id - 1].pipename) != 0 && errno != ENOENT) {
-        fprintf(stderr, "[ERR]: unlink(%s) failed: %s\n", sessions[session_id - 1].pipename,
+    if (unlink(session->pipename) != 0 && errno != ENOENT) {
+        fprintf(stderr, "[ERR]: unlink(%s) failed: %s\n", session->pipename,
                 strerror(errno));
         end_sessions();
         exit(EXIT_FAILURE);
     }
 }
 
-void case_open(char *request) {
-    int session_id, flags;
+void case_open(Session *session) {
+    int flags;
     char filename[BUFFER_SIZE];
-    memcpy(&session_id, request + 1, sizeof(int));
-    memcpy(&flags, request + 1 + sizeof(int), sizeof(int));
-    memcpy(filename, request + 1 + 2 * sizeof(int), sizeof(char) * BUFFER_SIZE);
+    memcpy(&flags, session->buffer + 1 + sizeof(int), sizeof(int));
+    memcpy(filename, session->buffer + 1 + 2 * sizeof(int), sizeof(char) * BUFFER_SIZE);
     int call_ret = tfs_open(filename, flags);
-    printf("session id is %d\n", session_id);
+    printf("session id is %d\n", session->session_id);
     printf("flags is %d\n", flags);
     printf("filename is %s\n", filename);
-    int tx = sessions[session_id - 1].tx;
+    int tx = session->tx;
     printf("Tx is %d\n", tx);
     if (write(tx, &call_ret, sizeof(int)) == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
@@ -194,35 +201,33 @@ void case_open(char *request) {
     }
 }
 
-void case_close(char *request) {
-    int session_id, fhandle;
-    memcpy(&session_id, request + 1, sizeof(int));
-    memcpy(&fhandle, request + 1 + sizeof(int), sizeof(int));
+void case_close(Session *session) {
+    int fhandle;
+    memcpy(&fhandle, session->buffer + 1 + sizeof(int), sizeof(int));
     int tfs_ret_int = tfs_close(fhandle);
-    if (write(sessions[session_id - 1].tx, &tfs_ret_int, sizeof(int)) == -1) {
+    if (write(session->tx, &tfs_ret_int, sizeof(int)) == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         end_sessions();
         exit(EXIT_FAILURE);
     }
 }
 
-void case_write(char *request) {
-    int session_id, fhandle;
+void case_write(Session *session) {
+    int fhandle;
     size_t len;
     char *buffer;
     ssize_t tfs_ret_ssize_t;
-    memcpy(&session_id, request + 1, sizeof(int));
-    memcpy(&fhandle, request + 1 + sizeof(int), sizeof(int));
-    memcpy(&len, request + 1 + 2 * sizeof(int), sizeof(size_t));
+    memcpy(&fhandle, session->buffer + 1 + sizeof(int), sizeof(int));
+    memcpy(&len, session->buffer + 1 + 2 * sizeof(int), sizeof(size_t));
     buffer = malloc(sizeof(char) * len);
     if (buffer == NULL) {
         fprintf(stderr, "[ERR]: malloc failed: %s\n", strerror(errno));
         end_sessions();
         exit(EXIT_FAILURE);
     }
-    memcpy(buffer, request + 1 + 2 * sizeof(int) + sizeof(size_t), sizeof(char) * len);
+    memcpy(buffer, session->buffer + 1 + 2 * sizeof(int) + sizeof(size_t), sizeof(char) * len);
     tfs_ret_ssize_t = tfs_write(fhandle, buffer, len);
-    if (write(sessions[session_id - 1].tx, &tfs_ret_ssize_t, sizeof(ssize_t)) == -1) {
+    if (write(session->tx, &tfs_ret_ssize_t, sizeof(ssize_t)) == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         free(buffer);
         end_sessions();
@@ -231,14 +236,13 @@ void case_write(char *request) {
     free(buffer);
 }
 
-void case_read(char *request) {
-    int session_id, fhandle;
+void case_read(Session *session) {
+    int fhandle;
     size_t len;
     char *buffer;
     ssize_t tfs_ret_ssize_t;
-    memcpy(&session_id, request + 1, sizeof(int));
-    memcpy(&fhandle, request + 1 + sizeof(int), sizeof(int));
-    memcpy(&len, request + 1 + 2 * sizeof(int), sizeof(size_t));
+    memcpy(&fhandle, session->buffer + 1 + sizeof(int), sizeof(int));
+    memcpy(&len, session->buffer + 1 + 2 * sizeof(int), sizeof(size_t));
     buffer = malloc(sizeof(char) * len);
     if (buffer == NULL) {
         fprintf(stderr, "[ERR]: malloc failed: %s\n", strerror(errno));
@@ -246,13 +250,13 @@ void case_read(char *request) {
         exit(EXIT_FAILURE);
     }
     tfs_ret_ssize_t = tfs_read(fhandle, buffer, len);
-    if (write(sessions[session_id - 1].tx, &tfs_ret_ssize_t, sizeof(ssize_t)) == -1) {
+    if (write(session->tx, &tfs_ret_ssize_t, sizeof(ssize_t)) == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         free(buffer);
         end_sessions();
         exit(EXIT_FAILURE);
     }
-    if (write(sessions[session_id - 1].tx, buffer, (size_t) tfs_ret_ssize_t) == -1) {
+    if (write(session->tx, buffer, (size_t) tfs_ret_ssize_t) == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         free(buffer);
         end_sessions();
@@ -261,11 +265,10 @@ void case_read(char *request) {
     free(buffer);
 }
 
-void case_shutdown(char *request) {
-    int session_id, tfs_ret_int;
-    memcpy(&session_id, request + 1, sizeof(int));
+void case_shutdown(Session *session) {
+    int tfs_ret_int;
     tfs_ret_int = tfs_destroy_after_all_closed();
-    if (write(sessions[session_id - 1].tx, &tfs_ret_int, sizeof(int)) == -1) {
+    if (write(session->tx, &tfs_ret_int, sizeof(int)) == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         end_sessions();
         exit(EXIT_FAILURE);
@@ -280,14 +283,11 @@ void case_shutdown(char *request) {
 
 void start_sessions() {
     init_mutex(&next_session_id_lock);
+    init_mutex(&sessions_lock);
     for (int i = 0; i < MAX_CLIENTS; i++) {
         sessions[i].session_id = i + 1;
         sessions[i].is_active = false;
         sessions[i].buffer = malloc(sizeof(char) * MAX_REQUEST_SIZE);
-        if (sessions[i].buffer == NULL) {
-            fprintf(stderr, "[ERR]: malloc failed: %s\n", strerror(errno));
-            exit(EXIT_FAILURE);
-        }
         init_mutex(&sessions[i].session_lock);
         if (pthread_cond_init(&sessions[i].session_flag, NULL) != 0) {
             fprintf(stderr, "[ERR]: cond init failed: %s\n", strerror(errno));
@@ -302,8 +302,8 @@ void start_sessions() {
 
 void end_sessions() {
     destroy_mutex(&next_session_id_lock);
+    destroy_mutex(&sessions_lock);
     for (int i = 0; i < MAX_CLIENTS; i++) {
-        free(sessions[i].buffer);
         pthread_mutex_destroy(&sessions[i].session_lock);
         pthread_cond_destroy(&sessions[i].session_flag);
     }
@@ -328,37 +328,37 @@ void *thread_handler(void *arg) {
         switch (op_code) {
             case TFS_OP_CODE_MOUNT:
                 printf("[INFO]: Entering MOUNT case.\n");
-                case_mount(session->buffer);
+                case_mount(session);
                 printf("[INFO]: Exiting MOUNT case.\n");
                 break;
             case TFS_OP_CODE_UNMOUNT:
                 printf("[INFO]: Entering UNMOUNT case.\n");
-                case_unmount(session->buffer);
+                case_unmount(session);
                 printf("[INFO]: Exiting UNMOUNT case.\n");
                 break;
             case TFS_OP_CODE_OPEN:
                 printf("[INFO]: Entering OPEN case.\n");
-                case_open(session->buffer);
+                case_open(session);
                 printf("[INFO]: Exiting OPEN case.\n");
                 break;
             case TFS_OP_CODE_CLOSE:
                 printf("[INFO]: Entering CLOSE case.\n");
-                case_close(session->buffer);
+                case_close(session);
                 printf("[INFO]: Exiting CLOSE case.\n");
                 break;
             case TFS_OP_CODE_WRITE:
                 printf("[INFO]: Entering WRITE case.\n");
-                case_write(session->buffer);
+                case_write(session);
                 printf("[INFO]: Exiting WRITE case.\n");
                 break;
             case TFS_OP_CODE_READ:
                 printf("[INFO]: Entering READ case.\n");
-                case_read(session->buffer);
+                case_read(session);
                 printf("[INFO]: Exiting READ case.\n");
                 break;
             case TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED:
                 printf("[INFO]: Entering SHUTDOWN_AFTER_ALL_CLOSED case.\n");
-                case_shutdown(session->buffer);
+                case_shutdown(session);
                 printf("[INFO]: Exiting SHUTDOWN_AFTER_ALL_CLOSED case.\n");
                 shutting_down = true;
                 break;
@@ -366,6 +366,7 @@ void *thread_handler(void *arg) {
                 fprintf(stderr, "[ERR]: invalid request: %c\n", op_code);
         }
         session->is_active = false;
+        strcpy(session->buffer, ""); // clearing the buffer after each request
         unlock_mutex(&session->session_lock);
     }
 }

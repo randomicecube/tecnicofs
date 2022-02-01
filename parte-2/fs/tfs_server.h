@@ -23,46 +23,43 @@ typedef struct Session{
 } Session;
 
 #define MOUNT_SIZE_SERVER (BUFFER_SIZE * sizeof(char))
-#define UNMOUNT_SIZE_SERVER (sizeof(int))
-#define OPEN_SIZE_SERVER (2 * sizeof(int) + BUFFER_SIZE * sizeof(char))
-#define CLOSE_SIZE_SERVER (2 * sizeof(int))
-#define READ_SIZE_SERVER (2 * sizeof(int) + sizeof(size_t))
-#define SHUTDOWN_SIZE_SERVER (sizeof(int))
+#define OPEN_SIZE_SERVER (sizeof(int) + BUFFER_SIZE * sizeof(char))
+#define READ_SIZE_SERVER (sizeof(int) + sizeof(size_t))
 
 /*
  * Performs the bridge between server and client in the tfs_mount operation
  */
-void case_mount(char *request);
+void case_mount(Session *session);
 
 /*
  * Performs the bridge between server and client in the tfs_unmount operation
  */
-void case_unmount(char *request);
+void case_unmount(Session *session);
 
 /*
  * Performs the bridge between server and client in the tfs_open operation
  */
-void case_open(char *request);
+void case_open(Session *session);
 
 /*
  * Performs the bridge between server and client in the tfs_close operation
  */
-void case_close(char *request);
+void case_close(Session *session);
 
 /*
  * Performs the bridge between server and client in the tfs_write operation
  */
-void case_write(char *request);
+void case_write(Session *session);
 
 /*
  * Performs the bridge between server and client in the tfs_read operation
  */
-void case_read(char *request);
+void case_read(Session *session);
 
 /*
  * Performs the bridge between server and client in the tfs_shutdown operation
  */
-void case_shutdown(char *request);
+void case_shutdown(Session *session);
 
 /*
  * Starts all the available sessions in the server, initializing:
