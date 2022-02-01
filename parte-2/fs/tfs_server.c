@@ -17,9 +17,8 @@ int next_session_id = 1;
 Session sessions[MAX_CLIENTS];
 bool shutting_down = false;
 pthread_mutex_t next_session_id_lock;
-pthread_mutex_t sessions_lock;
 
-// TODO - DEAL WITH LONG READS AND WRITES (WITH A FOR LOOP)
+// TODO - DEAL WITH LONG READS AND WRITES (WITH A FOR LOOP, FUNCTION)
 
 int main(int argc, char **argv) {
     if (argc < 2) {
@@ -59,8 +58,7 @@ int main(int argc, char **argv) {
     Session *current_session;
     do {
         ret = read(rx, &op_code, sizeof(char));
-        if (op_code == TFS_OP_CODE_MOUNT) printf("FOUND OP CODE MOUNT\n");
-        if (ret == -1) {
+        if (ret == -1) { // TODO - ABSTRACTION IN THIS (READ FUNCTION)
             fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));;
             continue;
         }
@@ -74,27 +72,21 @@ int main(int argc, char **argv) {
             }
             continue;
         }
-        if (ret == -1) { // TODO - ABSTRACTION IN THIS (READ FUNCTION)
-            fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
-            continue;
-        }
+
         if (op_code == TFS_OP_CODE_MOUNT) {
-            printf("Received mount request.\n");
             lock_mutex(&next_session_id_lock);
             if (next_session_id > 64) {
-                fprintf(stderr, "[ERR]: Too many clients connected. Try again in a bit.\n");
+                fprintf(stderr, "[ERR]: Too many clients connected. Try again shortly.\n");
                 unlock_mutex(&next_session_id_lock);
                 continue;
             }
             session_id = next_session_id++;
-            current_session = &sessions[session_id - 1];
-            current_session->session_id = session_id;
             unlock_mutex(&next_session_id_lock);
+            current_session = &sessions[session_id - 1];
             lock_mutex(&current_session->session_lock);
+            current_session->session_id = session_id;
             memcpy(current_session->buffer, &op_code, sizeof(char));
             ret = read(rx, current_session->buffer + 1, MOUNT_SIZE_SERVER);
-            printf("Ending mount request.\n");
-            printf("Session id now is %d\n", session_id);
         } else {
             ret = read(rx, &session_id, sizeof(int));
             if (ret == -1) {
@@ -192,12 +184,7 @@ void case_open(Session *session) {
     memcpy(&flags, session->buffer + 1 + sizeof(int), sizeof(int));
     memcpy(filename, session->buffer + 1 + 2 * sizeof(int), sizeof(char) * BUFFER_SIZE);
     int call_ret = tfs_open(filename, flags);
-    printf("session id is %d\n", session->session_id);
-    printf("flags is %d\n", flags);
-    printf("filename is %s\n", filename);
-    int tx = session->tx;
-    printf("Tx is %d\n", tx);
-    if (write(tx, &call_ret, sizeof(int)) == -1) {
+    if (write(session->tx, &call_ret, sizeof(int)) == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         end_sessions();
         exit(EXIT_FAILURE);
@@ -286,11 +273,14 @@ void case_shutdown(Session *session) {
 
 void start_sessions() {
     init_mutex(&next_session_id_lock);
-    init_mutex(&sessions_lock);
     for (int i = 0; i < MAX_CLIENTS; i++) {
         sessions[i].session_id = i + 1;
         sessions[i].is_active = false;
         sessions[i].buffer = malloc(sizeof(char) * MAX_REQUEST_SIZE);
+        if (sessions[i].buffer == NULL) {
+            fprintf(stderr, "[ERR]: malloc failed: %s\n", strerror(errno));
+            exit(EXIT_FAILURE);
+        }
         init_mutex(&sessions[i].session_lock);
         if (pthread_cond_init(&sessions[i].session_flag, NULL) != 0) {
             fprintf(stderr, "[ERR]: cond init failed: %s\n", strerror(errno));
@@ -305,7 +295,6 @@ void start_sessions() {
 
 void end_sessions() {
     destroy_mutex(&next_session_id_lock);
-    destroy_mutex(&sessions_lock);
     for (int i = 0; i < MAX_CLIENTS; i++) {
         pthread_mutex_destroy(&sessions[i].session_lock);
         pthread_cond_destroy(&sessions[i].session_flag);

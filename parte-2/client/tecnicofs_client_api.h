@@ -5,6 +5,16 @@
 #include <sys/types.h>
 
 /*
+  * Structure responsible for holding a given client's information.
+  */
+typedef struct Client {
+    int rx;
+    int tx;
+    int session_id;
+    char *pipename;
+} Client;
+
+/*
  * Sizes used for writing in the pipe that connects a client to the server
  */
 #define MOUNT_SIZE_API (sizeof(char) + BUFFER_SIZE * sizeof(char))

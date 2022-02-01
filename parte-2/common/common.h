@@ -19,13 +19,6 @@ enum {
     TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED = 7
 };
 
-typedef struct Client {
-    int rx;
-    int tx;
-    int session_id;
-    char *pipename;
-} Client;
-
 /*
  * 2048 is used because
  * - we need to be able to read at least a block's worth (1024) for tfs_write
