@@ -69,9 +69,8 @@ void case_shutdown(Session *session);
  */
 void start_sessions();
 /*
-  * Stops all the available sessions in the server, destroying:
-  * - each session's lock
-  * - each session's cond_var
+  * Stops all the available sessions in the server, freeing each session's buffer
+  * It also closes the server's named pipe for reading and unlinks it
   */
 void end_sessions();
 

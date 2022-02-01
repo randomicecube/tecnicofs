@@ -73,6 +73,12 @@ int main(int argc, char **argv) {
                 end_sessions();
                 exit(EXIT_FAILURE);
             }
+            lock_mutex(&shutting_down_lock);
+            if (shutting_down) {
+                unlock_mutex(&shutting_down_lock);
+                break;
+            }
+            unlock_mutex(&shutting_down_lock);
             continue;
         }
 
@@ -81,6 +87,7 @@ int main(int argc, char **argv) {
             if (next_session_id > 64) {
                 fprintf(stderr, "[ERR]: Too many clients connected. Try again shortly.\n");
                 unlock_mutex(&next_session_id_lock);
+                // write(tx, -1, sizeof(int)); TODO - PART OF SENDING -1
                 continue;
             }
             session_id = next_session_id++;
@@ -140,6 +147,7 @@ int main(int argc, char **argv) {
     close(rx);
     unlink(pipename); // TODO - CHECK FOR ERRORS HERE
     end_sessions();
+    printf("TecnicoFS server shutting down.\n");
     return 0;
 }
 
@@ -152,6 +160,7 @@ int main(int argc, char **argv) {
 void case_mount(Session *session) {
     char client_pipename[BUFFER_SIZE];
     int tx;
+    // TODO - HERE RETURN -1 IF FULL
     memcpy(client_pipename, session->buffer + 1, sizeof(char) * BUFFER_SIZE);
     tx = open(client_pipename, O_WRONLY);
     if (tx == -1) {
@@ -298,10 +307,11 @@ void start_sessions() {
 }
 
 void end_sessions() {
-    destroy_mutex(&next_session_id_lock);
     for (int i = 0; i < MAX_CLIENTS; i++) {
-        pthread_mutex_destroy(&sessions[i].session_lock);
-        pthread_cond_destroy(&sessions[i].session_flag);
+        printf("[INFO]: session %d is ending\n", i + 1);
+        // lock_mutex(&sessions[i].session_lock);
+        free(sessions[i].buffer);
+        // unlock_mutex(&sessions[i].session_lock);
     }
 }
 
@@ -319,6 +329,13 @@ void *thread_handler(void *arg) {
         while (session->is_active == false) {
             pthread_cond_wait(&session->session_flag, &session->session_lock);
         }
+        lock_mutex(&shutting_down_lock);
+        if (shutting_down == true) {
+            unlock_mutex(&shutting_down_lock);
+            unlock_mutex(&session->session_lock);
+            break;
+        }
+        unlock_mutex(&shutting_down_lock);
         session->is_active = true;
         memcpy(&op_code, session->buffer, sizeof(char));
         switch (op_code) {
@@ -367,4 +384,5 @@ void *thread_handler(void *arg) {
         strcpy(session->buffer, ""); // clearing the buffer after each request
         unlock_mutex(&session->session_lock);
     }
+    return NULL;
 }
