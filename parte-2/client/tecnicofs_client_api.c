@@ -153,11 +153,14 @@ int tfs_shutdown_after_all_closed() {
     memcpy(server_request + 1, &client.session_id, sizeof(int));
 
     if (write(client.tx, server_request, sizeof(server_request)) == -1) {
+        printf("[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
     if (read(client.rx, &shutdown_ret, sizeof(int)) == -1) {
+        printf("[ERR]: read failed: %s\n", strerror(errno));
         return -1;
     }
+    printf("[INFO]: shutdown_ret: %d\n", shutdown_ret);
     // TODO - DO WE NEED TO CLOSE AND UNLINK HERE?
     return shutdown_ret;
 }

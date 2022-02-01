@@ -17,6 +17,7 @@ int next_session_id = 1;
 Session sessions[MAX_CLIENTS];
 bool shutting_down = false;
 pthread_mutex_t next_session_id_lock;
+pthread_mutex_t shutting_down_lock;
 
 // TODO - DEAL WITH LONG READS AND WRITES (WITH A FOR LOOP, FUNCTION)
 
@@ -56,7 +57,9 @@ int main(int argc, char **argv) {
     int session_id;
     char op_code;
     Session *current_session;
+    lock_mutex(&shutting_down_lock);
     do {
+        unlock_mutex(&shutting_down_lock);
         ret = read(rx, &op_code, sizeof(char));
         if (ret == -1) { // TODO - ABSTRACTION IN THIS (READ FUNCTION)
             fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));;
@@ -131,10 +134,11 @@ int main(int argc, char **argv) {
         current_session->is_active = true;
         pthread_cond_signal(&current_session->session_flag);
         unlock_mutex(&current_session->session_lock);
+        lock_mutex(&shutting_down_lock);
     } while(!shutting_down);
 
     close(rx);
-    unlink(pipename);
+    unlink(pipename); // TODO - CHECK FOR ERRORS HERE
     end_sessions();
     return 0;
 }
@@ -352,7 +356,9 @@ void *thread_handler(void *arg) {
                 printf("[INFO]: Entering SHUTDOWN_AFTER_ALL_CLOSED case.\n");
                 case_shutdown(session);
                 printf("[INFO]: Exiting SHUTDOWN_AFTER_ALL_CLOSED case.\n");
+                lock_mutex(&shutting_down_lock);
                 shutting_down = true;
+                unlock_mutex(&shutting_down_lock);
                 break;
             default:
                 fprintf(stderr, "[ERR]: invalid request: %c\n", op_code);

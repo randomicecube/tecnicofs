@@ -51,7 +51,9 @@ int main(int argc, char **argv) {
 
     assert(tfs_close(f) != -1);
 
-    assert(tfs_unmount() == 0);
+    // assert(tfs_unmount() == 0);
+
+    assert(tfs_shutdown_after_all_closed() == 0);
 
     printf(GRN "Successful test.\n" RESET);
 

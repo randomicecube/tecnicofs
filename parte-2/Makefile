@@ -15,8 +15,10 @@ SOURCES  := $(wildcard */*.c)
 HEADERS  := $(wildcard */*.h)
 OBJECTS  := $(SOURCES:.c=.o)
 TARGET_EXECS := fs/tfs_server
-TARGET_EXECS += tests/lib_destroy_after_all_closed_test 
+TARGET_EXECS += tests/lib_destroy_after_all_closed_test
 TARGET_EXECS += tests/client_server_simple_test
+TARGET_EXECS += tests/client_server_simple_test_processes
+TARGET_EXECS += tests/client_server_shutdown_test
 TARGET_EXECS += tests/test_open_after_destroy
 
 # VPATH is a variable used by Makefile which finds *sources* and makes them available throughout the codebase
@@ -71,6 +73,8 @@ fmt: $(SOURCES) $(HEADERS)
 # make uses a set of default rules, one of which compiles C binaries
 # the CC, LD, CFLAGS and LDFLAGS are used in this rule
 tests/client_server_simple_test: tests/client_server_simple_test.o client/tecnicofs_client_api.o
+tests/client_server_simple_test_processes: tests/client_server_simple_test_processes.o client/tecnicofs_client_api.o
+tests/client_server_shutdown_test: tests/client_server_shutdown_test.o client/tecnicofs_client_api.o
 fs/tfs_server: fs/operations.o fs/state.o
 tests/lib_destroy_after_all_closed_test: fs/operations.o fs/state.o
 tests/test_open_after_destroy: fs/operations.o fs/state.o
