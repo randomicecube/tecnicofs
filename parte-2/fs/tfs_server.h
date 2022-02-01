@@ -24,6 +24,7 @@ typedef struct Session{
 
 #define MOUNT_SIZE_SERVER (BUFFER_SIZE * sizeof(char))
 #define OPEN_SIZE_SERVER (sizeof(int) + BUFFER_SIZE * sizeof(char))
+#define CLOSE_SIZE_SERVER (sizeof(int))
 #define READ_SIZE_SERVER (sizeof(int) + sizeof(size_t))
 
 /*

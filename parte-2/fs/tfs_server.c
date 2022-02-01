@@ -59,6 +59,7 @@ int main(int argc, char **argv) {
     Session *current_session;
     do {
         ret = read(rx, &op_code, sizeof(char));
+        if (op_code == TFS_OP_CODE_MOUNT) printf("FOUND OP CODE MOUNT\n");
         if (ret == -1) {
             fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));;
             continue;
@@ -110,12 +111,14 @@ int main(int argc, char **argv) {
             memcpy(current_session->buffer + 1, &session_id, sizeof(int));
             switch (op_code) {
                 case TFS_OP_CODE_UNMOUNT:
-                case TFS_OP_CODE_CLOSE:
                 case TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED:
                     // cases not required - we have already read the session id
                     break;
                 case TFS_OP_CODE_OPEN:
                     ret = read(rx, current_session->buffer + 1 + sizeof(int), OPEN_SIZE_SERVER);
+                    break;
+                case TFS_OP_CODE_CLOSE:
+                    ret = read(rx, current_session->buffer + 1 + sizeof(int), CLOSE_SIZE_SERVER);
                     break;
                 case TFS_OP_CODE_WRITE:
                     size_t len;
@@ -175,7 +178,7 @@ void case_unmount(Session *session) {
         end_sessions();
         exit(EXIT_FAILURE);
     }
-    if (unlink(session->pipename) != 0 && errno != ENOENT) {
+    if (unlink(session->pipename) != 0 && errno != ENOENT) { // TODO - REMOVE? UNLINK IN CLIENT
         fprintf(stderr, "[ERR]: unlink(%s) failed: %s\n", session->pipename,
                 strerror(errno));
         end_sessions();
