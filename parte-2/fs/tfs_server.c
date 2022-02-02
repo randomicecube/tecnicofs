@@ -268,6 +268,7 @@ void case_shutdown(Session *session) {
     lock_mutex(&shutting_down_lock);
     shutting_down = true;
     unlock_mutex(&shutting_down_lock);
+    // TODO - TRY TO RETURN -1 TO THE CLIENT WHENEVER POSSIBLE
     if (write(session->tx, &tfs_ret_int, sizeof(int)) == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         end_sessions();
@@ -309,6 +310,7 @@ void end_sessions() {
     // close(rx);
     // unlink(pipename);
     // TODO - STILL DATA RACE HERE ON FREE (MULTIPLE CALLS TO END_SESSIONS SOMETIMES)
+    // TODO - CLOSE CALLER THREAD PIPE
     for (int i = 0; i < MAX_CLIENTS; i++) {
         free(sessions[i].buffer);
         if (pthread_kill(sessions[i].session_t, SIGINT) == -1) {
