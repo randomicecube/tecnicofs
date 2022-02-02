@@ -79,4 +79,6 @@ void end_sessions();
  */
 void *thread_handler(void *arg);
 
+bool check_pipe_open(ssize_t ret);
+
 #endif

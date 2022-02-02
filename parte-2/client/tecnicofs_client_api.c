@@ -46,6 +46,10 @@ int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
     if (read(client.rx, &client.session_id, sizeof(int)) == -1 || errno == EPIPE) {
         return -1;
     }
+    if (client.session_id == -1) { // too many sessions already in place
+        fprintf(stderr, "[ERR]: read failed %s\n", strerror(errno));
+        return -1;
+    }
     return 0;
 }
 
@@ -153,16 +157,14 @@ int tfs_shutdown_after_all_closed() {
     memcpy(server_request + 1, &client.session_id, sizeof(int));
 
     if (write(client.tx, server_request, sizeof(server_request)) == -1 || errno == EPIPE) {
-        printf("[ERR]: write failed: %s\n", strerror(errno));
+        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
     // read to shutdown_ret, check for signal from pipe
-    // TODO - HANDLE THESE INTERRUPTIONS BETTER
     if (read(client.rx, &shutdown_ret, sizeof(int)) == -1 || errno == EPIPE) {
-        printf("[ERR]: read failed: %s\n", strerror(errno));
+        fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
         return -1;
     }
-    printf("[INFO]: shutdown_ret: %d\n", shutdown_ret);
     // TODO - DO WE NEED TO CLOSE AND UNLINK HERE?
     return shutdown_ret;
 }

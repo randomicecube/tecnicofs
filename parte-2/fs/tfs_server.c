@@ -54,7 +54,6 @@ int main(int argc, char **argv) {
     }
 
     start_sessions();
-    signal(SIGPIPE, SIG_IGN); // TODO - is this required?
 
     ssize_t ret;
     int session_id;
@@ -63,45 +62,38 @@ int main(int argc, char **argv) {
     lock_mutex(&shutting_down_lock);
     do {
         unlock_mutex(&shutting_down_lock);
-        printf("Waiting for request...\n");
         ret = read(rx, &op_code, sizeof(char));
-        printf("Req received: %c\n", op_code);
-        if (ret == -1) { // TODO - ABSTRACTION IN THIS (READ FUNCTION)
-            fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));;
-            continue;
-        }
-        if (ret == 0) { // reached EOF (client closed pipe)
-            close(rx);
-            rx = open(pipename, O_RDONLY);
-            if (rx == -1) {
-                fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
-                end_sessions();
-                exit(EXIT_FAILURE);
-            }
-            lock_mutex(&shutting_down_lock);
-            if (shutting_down) {
-                unlock_mutex(&shutting_down_lock);
-                break;
-            }
-            unlock_mutex(&shutting_down_lock);
+        if (!check_pipe_open(ret)) {
             continue;
         }
 
         if (op_code == TFS_OP_CODE_MOUNT) {
             lock_mutex(&next_session_id_lock);
-            if (next_session_id > 64) {
-                fprintf(stderr, "[ERR]: Too many clients connected. Try again shortly.\n");
-                unlock_mutex(&next_session_id_lock);
-                // write(tx, -1, sizeof(int)); TODO - PART OF SENDING -1
-                continue;
-            }
             session_id = next_session_id++;
-            unlock_mutex(&next_session_id_lock);
             current_session = &sessions[session_id - 1];
             lock_mutex(&current_session->session_lock);
             current_session->session_id = session_id;
             memcpy(current_session->buffer, &op_code, sizeof(char));
             ret = read(rx, current_session->buffer + 1, MOUNT_SIZE_SERVER);
+            if (next_session_id > 64) {
+                fprintf(stderr, "[ERR]: Too many clients connected. Try again shortly.\n");
+                unlock_mutex(&next_session_id_lock);
+                char mount_pipename[BUFFER_SIZE];
+                memcpy(mount_pipename, current_session->buffer + 1, BUFFER_SIZE);
+                int mount_rx;
+                if ((mount_rx = open(mount_pipename, 0640)) == -1) {
+                    fprintf(stderr, "[ERR]: open failed %s\n", strerror(errno));
+                    continue;
+                }
+                int failure = -1;
+                if (write(mount_rx, &failure, sizeof(int)) == -1) {
+                    fprintf(stderr, "[ERR]: write failed %s\n", strerror(errno));
+                    continue;
+                }
+                close(mount_rx);
+                continue;
+            }
+            unlock_mutex(&next_session_id_lock);
         } else {
             ret = read(rx, &session_id, sizeof(int));
             if (ret == -1) {
@@ -163,7 +155,6 @@ int main(int argc, char **argv) {
 void case_mount(Session *session) {
     char client_pipename[BUFFER_SIZE];
     int tx;
-    // TODO - HERE RETURN -1 IF FULL
     memcpy(client_pipename, session->buffer + 1, sizeof(char) * BUFFER_SIZE);
     tx = open(client_pipename, O_WRONLY);
     if (tx == -1) {
@@ -186,7 +177,7 @@ void case_unmount(Session *session) {
         end_sessions();
         exit(EXIT_FAILURE);
     }
-    if (unlink(session->pipename) != 0 && errno != ENOENT) { // TODO - REMOVE? UNLINK IN CLIENT
+    if (unlink(session->pipename) != 0 && errno != ENOENT) {
         fprintf(stderr, "[ERR]: unlink(%s) failed: %s\n", session->pipename,
                 strerror(errno));
         end_sessions();
@@ -273,18 +264,15 @@ void case_read(Session *session) {
 
 void case_shutdown(Session *session) {
     int tfs_ret_int;
-    printf("[INFO]: Shutting down server.\n");
     tfs_ret_int = tfs_destroy_after_all_closed();
     lock_mutex(&shutting_down_lock);
     shutting_down = true;
     unlock_mutex(&shutting_down_lock);
-    printf("Before writing\n");
     if (write(session->tx, &tfs_ret_int, sizeof(int)) == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         end_sessions();
         exit(EXIT_FAILURE);
     }
-    printf("After writing\n");
     end_sessions();
 }
 
@@ -318,11 +306,17 @@ void start_sessions() {
 }
 
 void end_sessions() {
-    close(rx);
-    unlink(pipename);
+    // close(rx);
+    // unlink(pipename);
+    // TODO - STILL DATA RACE HERE ON FREE (MULTIPLE CALLS TO END_SESSIONS SOMETIMES)
     for (int i = 0; i < MAX_CLIENTS; i++) {
         free(sessions[i].buffer);
+        if (pthread_kill(sessions[i].session_t, SIGINT) == -1) {
+            fprintf(stderr, "[ERR]: thread kill failed: %s\n", strerror(errno));
+            exit(EXIT_FAILURE);
+        }
     }
+    exit(EXIT_SUCCESS);
 }
 
 /*
@@ -347,7 +341,9 @@ void *thread_handler(void *arg) {
             unlock_mutex(&session->session_lock);
             break;
         }
-        if (op_code == TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED) shutdown_called = true;
+        if (op_code == TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED) {
+            shutdown_called = true;
+        }
         unlock_mutex(&shutting_down_lock);
         switch (op_code) {
             case TFS_OP_CODE_MOUNT:
@@ -393,4 +389,28 @@ void *thread_handler(void *arg) {
         unlock_mutex(&session->session_lock);
     }
     return NULL;
+}
+
+bool check_pipe_open(ssize_t ret) {
+    if (ret == -1) {
+        fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
+        return false;
+    }
+    if (ret == 0) { // reached EOF (client closed pipe)
+        close(rx);
+        rx = open(pipename, O_RDONLY);
+        if (rx == -1) {
+            fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
+            end_sessions();
+            exit(EXIT_FAILURE);
+        }
+        lock_mutex(&shutting_down_lock);
+        if (shutting_down) {
+            unlock_mutex(&shutting_down_lock);
+            end_sessions();
+        }
+        unlock_mutex(&shutting_down_lock);
+        return false;
+    }
+    return true;
 }
