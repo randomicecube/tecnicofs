@@ -157,6 +157,7 @@ int tfs_shutdown_after_all_closed() {
         return -1;
     }
     // read to shutdown_ret, check for signal from pipe
+    // TODO - HANDLE THESE INTERRUPTIONS BETTER
     if (read(client.rx, &shutdown_ret, sizeof(int)) == -1 || errno == EPIPE) {
         printf("[ERR]: read failed: %s\n", strerror(errno));
         return -1;
