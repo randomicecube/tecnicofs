@@ -16,8 +16,11 @@
 int next_session_id = 1;
 Session sessions[MAX_CLIENTS];
 bool shutting_down = false;
+bool shutdown_called = false;
 pthread_mutex_t next_session_id_lock;
 pthread_mutex_t shutting_down_lock;
+char *pipename;
+int rx;
 
 // TODO - DEAL WITH LONG READS AND WRITES (WITH A FOR LOOP, FUNCTION)
 
@@ -29,7 +32,7 @@ int main(int argc, char **argv) {
 
     tfs_init();
 
-    char *pipename = argv[1];
+    pipename = argv[1];
     printf("Starting TecnicoFS server with pipe called %s\n", pipename);
 
     // unlink pipe
@@ -44,7 +47,7 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
     // open pipe for reading
-    int rx = open(pipename, O_RDONLY);
+    rx = open(pipename, O_RDONLY);
     if (rx == -1) {
         fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
@@ -60,7 +63,9 @@ int main(int argc, char **argv) {
     lock_mutex(&shutting_down_lock);
     do {
         unlock_mutex(&shutting_down_lock);
+        printf("Waiting for request...\n");
         ret = read(rx, &op_code, sizeof(char));
+        printf("Req received: %c\n", op_code);
         if (ret == -1) { // TODO - ABSTRACTION IN THIS (READ FUNCTION)
             fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));;
             continue;
@@ -144,8 +149,6 @@ int main(int argc, char **argv) {
         lock_mutex(&shutting_down_lock);
     } while(!shutting_down);
 
-    close(rx);
-    unlink(pipename); // TODO - CHECK FOR ERRORS HERE
     end_sessions();
     printf("TecnicoFS server shutting down.\n");
     return 0;
@@ -270,12 +273,19 @@ void case_read(Session *session) {
 
 void case_shutdown(Session *session) {
     int tfs_ret_int;
+    printf("[INFO]: Shutting down server.\n");
     tfs_ret_int = tfs_destroy_after_all_closed();
+    lock_mutex(&shutting_down_lock);
+    shutting_down = true;
+    unlock_mutex(&shutting_down_lock);
+    printf("Before writing\n");
     if (write(session->tx, &tfs_ret_int, sizeof(int)) == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         end_sessions();
         exit(EXIT_FAILURE);
     }
+    printf("After writing\n");
+    end_sessions();
 }
 
 /*
@@ -286,6 +296,7 @@ void case_shutdown(Session *session) {
 
 void start_sessions() {
     init_mutex(&next_session_id_lock);
+    init_mutex(&shutting_down_lock);
     for (int i = 0; i < MAX_CLIENTS; i++) {
         sessions[i].session_id = i + 1;
         sessions[i].is_active = false;
@@ -307,11 +318,10 @@ void start_sessions() {
 }
 
 void end_sessions() {
+    close(rx);
+    unlink(pipename);
     for (int i = 0; i < MAX_CLIENTS; i++) {
-        printf("[INFO]: session %d is ending\n", i + 1);
-        // lock_mutex(&sessions[i].session_lock);
         free(sessions[i].buffer);
-        // unlock_mutex(&sessions[i].session_lock);
     }
 }
 
@@ -330,14 +340,15 @@ void *thread_handler(void *arg) {
             pthread_cond_wait(&session->session_flag, &session->session_lock);
         }
         lock_mutex(&shutting_down_lock);
-        if (shutting_down == true) {
+        session->is_active = true;
+        memcpy(&op_code, session->buffer, sizeof(char));
+        if (shutdown_called == true && op_code == TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED) { // not continuing if already shutting down
             unlock_mutex(&shutting_down_lock);
             unlock_mutex(&session->session_lock);
             break;
         }
+        if (op_code == TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED) shutdown_called = true;
         unlock_mutex(&shutting_down_lock);
-        session->is_active = true;
-        memcpy(&op_code, session->buffer, sizeof(char));
         switch (op_code) {
             case TFS_OP_CODE_MOUNT:
                 printf("[INFO]: Entering MOUNT case.\n");
@@ -373,9 +384,6 @@ void *thread_handler(void *arg) {
                 printf("[INFO]: Entering SHUTDOWN_AFTER_ALL_CLOSED case.\n");
                 case_shutdown(session);
                 printf("[INFO]: Exiting SHUTDOWN_AFTER_ALL_CLOSED case.\n");
-                lock_mutex(&shutting_down_lock);
-                shutting_down = true;
-                unlock_mutex(&shutting_down_lock);
                 break;
             default:
                 fprintf(stderr, "[ERR]: invalid request: %c\n", op_code);
