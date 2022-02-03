@@ -292,6 +292,7 @@ void case_shutdown(Session *session) {
         exit(EXIT_FAILURE);
     }
     unlock_mutex(&shutting_down_lock);
+    
     printf("[INFO]: TecnicoFS server was shut down successfully.\n");
     exit(EXIT_SUCCESS);
 }
