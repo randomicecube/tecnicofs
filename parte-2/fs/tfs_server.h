@@ -68,11 +68,6 @@ void case_shutdown(Session *session);
  * - each session's cond_var
  */
 void start_sessions();
-/*
-  * Stops all the available sessions in the server, freeing each session's buffer
-  * It also closes the server's named pipe for reading and unlinks it
-  */
-void end_sessions();
 
 /*
  * Handles the requests from the receptor thread to a worker thread

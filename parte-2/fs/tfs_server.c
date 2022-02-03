@@ -20,8 +20,6 @@ bool shutdown_called = false;
 pthread_mutex_t next_session_id_lock;
 pthread_mutex_t shutting_down_lock;
 
-// TODO - DEAL WITH LONG READS AND WRITES (WITH A FOR LOOP, FUNCTION)
-
 int main(int argc, char **argv) {
     if (argc < 2) {
         fprintf(stderr, "Please specify the pathname of the server's pipe.\n");
@@ -156,7 +154,6 @@ int main(int argc, char **argv) {
                     // if unknown op code, we won't be able to know where to "skip to"
                     // therefore, we need to end the program here
                     fprintf(stderr, "[ERR]: Invalid op_code: %d\n", op_code);
-                    end_sessions();
                     return 2;
             }
         }
@@ -171,8 +168,7 @@ int main(int argc, char **argv) {
         lock_mutex(&shutting_down_lock);
     } while(!shutting_down);
 
-    end_sessions();
-    printf("[INFO]: TecnicoFS server was shut down successfully.\n");
+    // should never get here: case_shutdown should end the program whenever it's finished
     return 0;
 }
 
@@ -189,7 +185,6 @@ void case_mount(Session *session) {
     tx = open(client_pipename, O_WRONLY);
     if (tx == -1) {
         fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
-        end_sessions();
         exit(EXIT_FAILURE);
     }
     if (write(tx, &session->session_id, sizeof(int)) == -1) {
@@ -201,6 +196,11 @@ void case_mount(Session *session) {
 }
 
 void case_unmount(Session *session) {
+    int successful_unmount = 0;
+    if (write(session->tx, &successful_unmount, sizeof(int)) == -1) {
+        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
+        return;
+    }
     if (close(session->tx) != 0) {
         fprintf(stderr, "[ERR]: close failed: %s\n", strerror(errno));
         return;
@@ -245,7 +245,6 @@ void case_write(Session *session) {
     buffer = malloc(sizeof(char) * len);
     if (buffer == NULL) {
         fprintf(stderr, "[ERR]: malloc failed: %s\n", strerror(errno));
-        end_sessions();
         exit(EXIT_FAILURE);
     }
     memcpy(buffer, session->buffer + 1 + 2 * sizeof(int) + sizeof(size_t), sizeof(char) * len);
@@ -268,7 +267,6 @@ void case_read(Session *session) {
     buffer = malloc(sizeof(char) * len);
     if (buffer == NULL) {
         fprintf(stderr, "[ERR]: malloc failed: %s\n", strerror(errno));
-        end_sessions();
         exit(EXIT_FAILURE);
     }
     ret = tfs_read(fhandle, buffer, len);
@@ -289,14 +287,13 @@ void case_shutdown(Session *session) {
     int ret = tfs_destroy_after_all_closed();
     lock_mutex(&shutting_down_lock);
     shutting_down = true;
-    unlock_mutex(&shutting_down_lock);
     if (write(session->tx, &ret, sizeof(int)) == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
-        end_sessions();
         exit(EXIT_FAILURE);
     }
-    // end_sessions();
-    // exit(EXIT_SUCCESS);
+    unlock_mutex(&shutting_down_lock);
+    printf("[INFO]: TecnicoFS server was shut down successfully.\n");
+    exit(EXIT_SUCCESS);
 }
 
 /*
@@ -328,13 +325,6 @@ void start_sessions() {
     }
 }
 
-void end_sessions() {
-    for (int i = 0; i < MAX_CLIENTS; i++) {
-        pthread_cond_signal(&sessions[i].session_flag); // wake up the thread to kill it
-        free(sessions[i].buffer);
-    }
-}
-
 /*
  * ----------------------------------------------------------------------------
  * Below is the thread handler function.
@@ -350,11 +340,6 @@ void *thread_handler(void *arg) {
             pthread_cond_wait(&session->session_flag, &session->session_lock);
         }
         lock_mutex(&shutting_down_lock);
-        if (shutting_down) { // already in end_sessions, killing threads
-            unlock_mutex(&session->session_lock);
-            unlock_mutex(&shutting_down_lock);
-            break;
-        }
         session->is_active = true;
         memcpy(&op_code, session->buffer, sizeof(char));
         if (shutdown_called && op_code == TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED) { // not continuing if already shutting down
@@ -368,39 +353,25 @@ void *thread_handler(void *arg) {
         unlock_mutex(&shutting_down_lock);
         switch (op_code) {
             case TFS_OP_CODE_MOUNT:
-                printf("[INFO]: Entering MOUNT case.\n");
                 case_mount(session);
-                printf("[INFO]: Exiting MOUNT case.\n");
                 break;
             case TFS_OP_CODE_UNMOUNT:
-                printf("[INFO]: Entering UNMOUNT case.\n");
                 case_unmount(session);
-                printf("[INFO]: Exiting UNMOUNT case.\n");
                 break;
             case TFS_OP_CODE_OPEN:
-                printf("[INFO]: Entering OPEN case.\n");
                 case_open(session);
-                printf("[INFO]: Exiting OPEN case.\n");
                 break;
             case TFS_OP_CODE_CLOSE:
-                printf("[INFO]: Entering CLOSE case.\n");
                 case_close(session);
-                printf("[INFO]: Exiting CLOSE case.\n");
                 break;
             case TFS_OP_CODE_WRITE:
-                printf("[INFO]: Entering WRITE case.\n");
                 case_write(session);
-                printf("[INFO]: Exiting WRITE case.\n");
                 break;
             case TFS_OP_CODE_READ:
-                printf("[INFO]: Entering READ case.\n");
                 case_read(session);
-                printf("[INFO]: Exiting READ case.\n");
                 break;
             case TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED:
-                printf("[INFO]: Entering SHUTDOWN_AFTER_ALL_CLOSED case.\n");
                 case_shutdown(session);
-                printf("[INFO]: Exiting SHUTDOWN_AFTER_ALL_CLOSED case.\n");
                 break;
             default: break; // never gets here, already treated in main
         }
@@ -426,13 +397,11 @@ bool check_pipe_open(ssize_t ret, int rx, char *pipename) {
         rx = open(pipename, O_RDONLY);
         if (rx == -1) {
             fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
-            end_sessions();
             exit(EXIT_FAILURE);
         }
         lock_mutex(&shutting_down_lock);
         if (shutting_down) {
             unlock_mutex(&shutting_down_lock);
-            end_sessions();
             exit(EXIT_SUCCESS);
         }
         unlock_mutex(&shutting_down_lock);

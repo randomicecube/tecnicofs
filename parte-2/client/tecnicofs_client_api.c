@@ -66,6 +66,11 @@ int tfs_unmount() {
         return -1;
     }
 
+    int ret;
+    if (read(client.rx, &ret, sizeof(int)) == -1 || ret != 0 || errno == EPIPE) {
+        fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
+        return -1;
+    }
     if (close(client.rx) == -1 || errno == EPIPE) {
         fprintf(stderr, "[ERR]: close failed: %s\n", strerror(errno));
         return -1;
