@@ -26,14 +26,14 @@ int rx;
 
 int main(int argc, char **argv) {
     if (argc < 2) {
-        printf("Please specify the pathname of the server's pipe.\n");
+        fprintf(stderr, "Please specify the pathname of the server's pipe.\n");
         return 1;
     }
 
     tfs_init();
 
     pipename = argv[1];
-    printf("Starting TecnicoFS server with pipe called %s\n", pipename);
+    printf("[INFO]: Starting TecnicoFS server with pipe called %s\n", pipename);
 
     // unlink pipe
     if (unlink(pipename) != 0 && errno != ENOENT) {
@@ -131,6 +131,7 @@ int main(int argc, char **argv) {
                     ret = read(rx, current_session->buffer + 1  + sizeof(int), READ_SIZE_SERVER);
                     break;
                 default:
+                    // if unknown op code, we won't be able to know where to "skip to"
                     fprintf(stderr, "[ERR]: Invalid op_code: %d\n", op_code);
                     end_sessions();
             }
@@ -142,7 +143,6 @@ int main(int argc, char **argv) {
     } while(!shutting_down);
 
     end_sessions();
-    printf("TecnicoFS server shutting down.\n");
     return 0;
 }
 
@@ -274,7 +274,6 @@ void case_shutdown(Session *session) {
         end_sessions();
         exit(EXIT_FAILURE);
     }
-    end_sessions();
 }
 
 /*
@@ -307,17 +306,11 @@ void start_sessions() {
 }
 
 void end_sessions() {
-    // close(rx);
-    // unlink(pipename);
-    // TODO - STILL DATA RACE HERE ON FREE (MULTIPLE CALLS TO END_SESSIONS SOMETIMES)
-    // TODO - CLOSE CALLER THREAD PIPE
     for (int i = 0; i < MAX_CLIENTS; i++) {
+        pthread_cond_signal(&sessions[i].session_flag); // wake up the thread to kill it
         free(sessions[i].buffer);
-        if (pthread_kill(sessions[i].session_t, SIGINT) == -1) {
-            fprintf(stderr, "[ERR]: thread kill failed: %s\n", strerror(errno));
-            exit(EXIT_FAILURE);
-        }
     }
+    printf("[INFO]: TecnicoFS server shutting down successfully\n");
     exit(EXIT_SUCCESS);
 }
 
@@ -336,9 +329,14 @@ void *thread_handler(void *arg) {
             pthread_cond_wait(&session->session_flag, &session->session_lock);
         }
         lock_mutex(&shutting_down_lock);
+        if (shutting_down) { // already in end_sessions, killing threads
+            unlock_mutex(&session->session_lock);
+            unlock_mutex(&shutting_down_lock);
+            break;
+        }
         session->is_active = true;
         memcpy(&op_code, session->buffer, sizeof(char));
-        if (shutdown_called == true && op_code == TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED) { // not continuing if already shutting down
+        if (shutdown_called && op_code == TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED) { // not continuing if already shutting down
             unlock_mutex(&shutting_down_lock);
             unlock_mutex(&session->session_lock);
             break;
@@ -383,8 +381,7 @@ void *thread_handler(void *arg) {
                 case_shutdown(session);
                 printf("[INFO]: Exiting SHUTDOWN_AFTER_ALL_CLOSED case.\n");
                 break;
-            default:
-                fprintf(stderr, "[ERR]: invalid request: %c\n", op_code);
+            default: break; // never gets here, already treated in main
         }
         session->is_active = false;
         strcpy(session->buffer, ""); // clearing the buffer after each request
@@ -393,6 +390,13 @@ void *thread_handler(void *arg) {
     return NULL;
 }
 
+/*
+ * ----------------------------------------------------------------------------
+ * Below is a helper function for the receving thread in main.
+ * Checks if it was able to read correctly from the pipe.
+ * If it finds out that the pipe was closed, it tries to open it again.
+ * ----------------------------------------------------------------------------
+ */
 bool check_pipe_open(ssize_t ret) {
     if (ret == -1) {
         fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
