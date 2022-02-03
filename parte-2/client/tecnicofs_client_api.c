@@ -41,13 +41,15 @@ int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
     memcpy(server_request + 1, client_pipe_path, sizeof(char) * strlen(client_pipe_path));
 
     if (write(client.tx, server_request, sizeof(server_request)) == -1 || errno == EPIPE) {
+        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
     if (read(client.rx, &client.session_id, sizeof(int)) == -1 || errno == EPIPE) {
+        fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
         return -1;
     }
-    if (client.session_id == -1) { // too many sessions already in place
-        fprintf(stderr, "[ERR]: read failed %s\n", strerror(errno));
+    if (client.session_id == -1) {
+        fprintf(stderr, "[ERR]: too many active sessions already %s\n", strerror(errno));
         return -1;
     }
     return 0;
@@ -60,6 +62,7 @@ int tfs_unmount() {
     memcpy(server_request + 1, &client.session_id, sizeof(int));
     
     if (write(client.tx, server_request, sizeof(server_request)) == -1 || errno == EPIPE) {
+        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
 
@@ -83,10 +86,13 @@ int tfs_open(char const *name, int flags) {
     memcpy(server_request + 1 + sizeof(int), &flags, sizeof(int));
     memset(server_request + 1 + 2 * sizeof(int), '\0', sizeof(char) * BUFFER_SIZE);
     memcpy(server_request + 1 + 2 * sizeof(int), name, sizeof(char) * strlen(name));
+    
     if (write(client.tx, server_request, sizeof(server_request)) == -1 || errno == EPIPE) {
+        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
     if (read(client.rx, &ret, sizeof(int)) == -1 || errno == EPIPE) {
+        fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
         return -1;
     }
     return ret;
@@ -101,9 +107,11 @@ int tfs_close(int fhandle) {
     memcpy(server_request + 1 + sizeof(int), &fhandle, sizeof(int));
 
     if (write(client.tx, server_request, sizeof(server_request)) == -1 || errno == EPIPE) {
+        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
     if (read(client.rx, &ret, sizeof(int)) == -1 || errno == EPIPE) {
+        fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
         return -1;
     }
     return ret;
@@ -120,9 +128,11 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t len) {
     memcpy(server_request + 1 + 2 * sizeof(int) + sizeof(size_t), buffer, sizeof(char) * len);
 
     if (write(client.tx, server_request, sizeof(server_request)) == -1 || errno == EPIPE) {
+        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
     if (read(client.rx, &ret, sizeof(ssize_t)) == -1 || errno == EPIPE) {
+        fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
         return -1;
     }
     return ret;
@@ -138,12 +148,15 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
     memcpy(server_request + 1 + 2 * sizeof(int), &len, sizeof(size_t));
 
     if (write(client.tx, server_request, sizeof(server_request)) == -1 || errno == EPIPE) {
+        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
     if (read(client.rx, &ret, sizeof(ssize_t)) == -1 || errno == EPIPE) {
+        fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
         return -1;
     }
     if (read(client.rx, buffer, sizeof(char) * len) == -1 || errno == EPIPE) {
+        fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
         return -1;
     }
     return ret;
@@ -160,11 +173,17 @@ int tfs_shutdown_after_all_closed() {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
-    // read to shutdown_ret, check for signal from pipe
     if (read(client.rx, &shutdown_ret, sizeof(int)) == -1 || errno == EPIPE) {
         fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
         return -1;
     }
-    // TODO - DO WE NEED TO CLOSE AND UNLINK HERE?
+    if (close(client.tx) == -1 || errno == EPIPE) {
+        fprintf(stderr, "[ERR]: close failed: %s\n", strerror(errno));
+        return -1;
+    }
+    if (close(client.rx) == -1 || errno == EPIPE) {
+        fprintf(stderr, "[ERR]: close failed: %s\n", strerror(errno));
+        return -1;
+    }
     return shutdown_ret;
 }

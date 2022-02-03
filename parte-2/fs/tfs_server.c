@@ -132,7 +132,7 @@ int main(int argc, char **argv) {
                     break;
                 default:
                     fprintf(stderr, "[ERR]: Invalid op_code: %d\n", op_code);
-                    continue;
+                    end_sessions();
             }
         }
         current_session->is_active = true;
