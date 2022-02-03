@@ -86,4 +86,10 @@ void *thread_handler(void *arg);
  */
 bool check_pipe_open(ssize_t ret, int rx, char *pipename);
 
+/*
+ * Helper function for handling the case where it's not possible for another
+ * client to connect to the server.
+ */
+void handle_too_many_clients(Session *session);
+
 #endif

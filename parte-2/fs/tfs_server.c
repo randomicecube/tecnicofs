@@ -56,12 +56,15 @@ int main(int argc, char **argv) {
     ssize_t ret;
     int session_id;
     char op_code;
+    char temp_buffer[MAX_REQUEST_SIZE];
     Session *current_session;
+    bool too_many_clients;
     lock_mutex(&shutting_down_lock);
     do {
+        too_many_clients = false;
         unlock_mutex(&shutting_down_lock);
         ret = read(rx, &op_code, sizeof(char));
-        if (!check_pipe_open(ret, rx, pipename)) {
+        if (!check_pipe_open(ret, rx, pipename)) { // if it had to be reopened
             continue;
         }
 
@@ -72,29 +75,26 @@ int main(int argc, char **argv) {
             lock_mutex(&current_session->session_lock);
             current_session->session_id = session_id;
             memcpy(current_session->buffer, &op_code, sizeof(char));
-            ret = read(rx, current_session->buffer + 1, MOUNT_SIZE_SERVER);
+
             if (next_session_id > 64) {
-                fprintf(stderr, "[ERR]: Too many clients connected. Try again shortly.\n");
-                unlock_mutex(&next_session_id_lock);
-                char mount_pipename[BUFFER_SIZE];
-                memcpy(mount_pipename, current_session->buffer + 1, BUFFER_SIZE);
-                int mount_rx;
-                if ((mount_rx = open(mount_pipename, 0640)) == -1) {
-                    fprintf(stderr, "[ERR]: open failed %s\n", strerror(errno));
-                    continue;
+                handle_too_many_clients(current_session);
+                // we still need to read the rest of the content sent by the client
+                // even though we are not going to do anything of use to it
+                // so that there are no conflicts with further clients' requests
+                if (read(rx, temp_buffer, MOUNT_SIZE_SERVER) == -1) {
+                    fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
                 }
-                int failure = -1;
-                if (write(mount_rx, &failure, sizeof(int)) == -1) {
-                    fprintf(stderr, "[ERR]: write failed %s\n", strerror(errno));
-                    continue;
-                }
-                close(mount_rx);
+                unlock_mutex(&current_session->session_lock);
+                continue;
+            }
+            if (read(rx, current_session->buffer + 1, MOUNT_SIZE_SERVER) == -1) {
+                fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
+                unlock_mutex(&current_session->session_lock);
                 continue;
             }
             unlock_mutex(&next_session_id_lock);
         } else {
-            ret = read(rx, &session_id, sizeof(int));
-            if (ret == -1) {
+            if (read(rx, &session_id, sizeof(int)) == -1) {
                 fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
                 continue;
             }
@@ -102,40 +102,71 @@ int main(int argc, char **argv) {
                 fprintf(stderr, "[ERR]: invalid session id: %d\n", session_id);
                 continue;
             }
+
             current_session = &sessions[session_id - 1];
             lock_mutex(&current_session->session_lock);
             memcpy(current_session->buffer, &op_code, sizeof(char));
             memcpy(current_session->buffer + 1, &session_id, sizeof(int));
             switch (op_code) {
+                case TFS_OP_CODE_OPEN:
+                    if (read(rx, current_session->buffer + 1 + sizeof(int), OPEN_SIZE_SERVER) == -1) {
+                        fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
+                        unlock_mutex(&current_session->session_lock);
+                        continue;
+                    }
+                    break;
+                case TFS_OP_CODE_CLOSE:
+                    if (read(rx, current_session->buffer + 1 + sizeof(int), CLOSE_SIZE_SERVER) == -1) {
+                        fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
+                        unlock_mutex(&current_session->session_lock);
+                        continue;
+                    } 
+                    break;
+                case TFS_OP_CODE_WRITE:
+                    size_t len;
+                    if (read(rx, current_session->buffer + 1 + sizeof(int), sizeof(int)) == -1) {
+                        fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
+                        unlock_mutex(&current_session->session_lock);
+                        continue;
+                    }
+                    if (read(rx, &len, sizeof(size_t)) == -1) {
+                        fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
+                        unlock_mutex(&current_session->session_lock);
+                        continue;
+                    }
+                    memcpy(current_session->buffer + 1 + 2 * sizeof(int), &len, sizeof(size_t));
+                    if (read(rx, current_session->buffer + 1 + 2 * sizeof(int) + sizeof(size_t), sizeof(char) * len) == -1) {
+                        fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
+                        unlock_mutex(&current_session->session_lock);
+                        continue;
+                    }
+                    break;
+                case TFS_OP_CODE_READ:
+                    if (read(rx, current_session->buffer + 1  + sizeof(int), READ_SIZE_SERVER) == -1) {
+                        fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
+                        unlock_mutex(&current_session->session_lock);
+                        continue;
+                    }
+                    break;
                 case TFS_OP_CODE_UNMOUNT:
                 case TFS_OP_CODE_SHUTDOWN_AFTER_ALL_CLOSED:
                     // cases not required - we have already read the session id
                     break;
-                case TFS_OP_CODE_OPEN:
-                    ret = read(rx, current_session->buffer + 1 + sizeof(int), OPEN_SIZE_SERVER);
-                    break;
-                case TFS_OP_CODE_CLOSE:
-                    ret = read(rx, current_session->buffer + 1 + sizeof(int), CLOSE_SIZE_SERVER);
-                    break;
-                case TFS_OP_CODE_WRITE:
-                    size_t len;
-                    // TODO VERIFY SYSCALLS
-                    read(rx, current_session->buffer + 1 + sizeof(int), sizeof(int)); // fhandle
-                    read(rx, &len, sizeof(size_t));
-                    memcpy(current_session->buffer + 1 + 2 * sizeof(int), &len, sizeof(size_t));
-                    read(rx, current_session->buffer + 1 + 2 * sizeof(int) + sizeof(size_t), sizeof(char) * len);
-                    break;
-                case TFS_OP_CODE_READ:
-                    ret = read(rx, current_session->buffer + 1  + sizeof(int), READ_SIZE_SERVER);
-                    break;
                 default:
                     // if unknown op code, we won't be able to know where to "skip to"
+                    // therefore, we need to end the program here
                     fprintf(stderr, "[ERR]: Invalid op_code: %d\n", op_code);
                     end_sessions();
+                    return 2;
             }
         }
-        current_session->is_active = true;
-        pthread_cond_signal(&current_session->session_flag);
+
+        if (!too_many_clients) {
+            // we only send the request if the session id was valid
+            // otherwise we just ignore the request's content
+            current_session->is_active = true;
+            pthread_cond_signal(&current_session->session_flag);
+        }
         unlock_mutex(&current_session->session_lock);
         lock_mutex(&shutting_down_lock);
     } while(!shutting_down);
@@ -264,6 +295,8 @@ void case_shutdown(Session *session) {
         end_sessions();
         exit(EXIT_FAILURE);
     }
+    // end_sessions();
+    // exit(EXIT_SUCCESS);
 }
 
 /*
@@ -313,7 +346,7 @@ void *thread_handler(void *arg) {
     char op_code;
     while (true) {
         lock_mutex(&session->session_lock);
-        while (session->is_active == false) {
+        while (!session->is_active) {
             pthread_cond_wait(&session->session_flag, &session->session_lock);
         }
         lock_mutex(&shutting_down_lock);
@@ -380,7 +413,7 @@ void *thread_handler(void *arg) {
 
 /*
  * ----------------------------------------------------------------------------
- * Below is the helper function for the receiving thread in main.
+ * Below are general-use helper functions used in main.
  * ----------------------------------------------------------------------------
  */
 bool check_pipe_open(ssize_t ret, int rx, char *pipename) {
@@ -400,9 +433,28 @@ bool check_pipe_open(ssize_t ret, int rx, char *pipename) {
         if (shutting_down) {
             unlock_mutex(&shutting_down_lock);
             end_sessions();
+            exit(EXIT_SUCCESS);
         }
         unlock_mutex(&shutting_down_lock);
         return false;
     }
     return true;
+}
+
+void handle_too_many_clients(Session *session) {
+    fprintf(stderr, "[ERR]: Too many clients connected. Try again shortly.\n");
+    unlock_mutex(&next_session_id_lock);
+    char pipename[BUFFER_SIZE];
+    memcpy(pipename, session->buffer + 1, BUFFER_SIZE);
+    int rx;
+    if ((rx = open(pipename, 0640)) == -1) {
+        fprintf(stderr, "[ERR]: open failed %s\n", strerror(errno));
+        return;
+    }
+    int failure = -1;
+    if (write(rx, &failure, sizeof(int)) == -1) {
+        fprintf(stderr, "[ERR]: write failed %s\n", strerror(errno));
+        return;
+    }
+    close(rx);
 }
