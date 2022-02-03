@@ -19,8 +19,6 @@ bool shutting_down = false;
 bool shutdown_called = false;
 pthread_mutex_t next_session_id_lock;
 pthread_mutex_t shutting_down_lock;
-char *pipename;
-int rx;
 
 // TODO - DEAL WITH LONG READS AND WRITES (WITH A FOR LOOP, FUNCTION)
 
@@ -32,7 +30,7 @@ int main(int argc, char **argv) {
 
     tfs_init();
 
-    pipename = argv[1];
+    char *pipename = argv[1];
     printf("[INFO]: Starting TecnicoFS server with pipe called %s\n", pipename);
 
     // unlink pipe
@@ -47,7 +45,7 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
     // open pipe for reading
-    rx = open(pipename, O_RDONLY);
+    int rx = open(pipename, O_RDONLY);
     if (rx == -1) {
         fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
@@ -63,7 +61,7 @@ int main(int argc, char **argv) {
     do {
         unlock_mutex(&shutting_down_lock);
         ret = read(rx, &op_code, sizeof(char));
-        if (!check_pipe_open(ret)) {
+        if (!check_pipe_open(ret, rx, pipename)) {
             continue;
         }
 
@@ -143,6 +141,7 @@ int main(int argc, char **argv) {
     } while(!shutting_down);
 
     end_sessions();
+    printf("[INFO]: TecnicoFS server was shut down successfully.\n");
     return 0;
 }
 
@@ -164,8 +163,7 @@ void case_mount(Session *session) {
     }
     if (write(tx, &session->session_id, sizeof(int)) == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
-        end_sessions();
-        exit(EXIT_FAILURE);
+        return;
     }
     session->tx = tx;
     session->pipename = client_pipename;
@@ -174,14 +172,12 @@ void case_mount(Session *session) {
 void case_unmount(Session *session) {
     if (close(session->tx) != 0) {
         fprintf(stderr, "[ERR]: close failed: %s\n", strerror(errno));
-        end_sessions();
-        exit(EXIT_FAILURE);
+        return;
     }
     if (unlink(session->pipename) != 0 && errno != ENOENT) {
         fprintf(stderr, "[ERR]: unlink(%s) failed: %s\n", session->pipename,
                 strerror(errno));
-        end_sessions();
-        exit(EXIT_FAILURE);
+        return;
     }
 }
 
@@ -193,19 +189,18 @@ void case_open(Session *session) {
     int call_ret = tfs_open(filename, flags);
     if (write(session->tx, &call_ret, sizeof(int)) == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
-        end_sessions();
-        exit(EXIT_FAILURE);
+        return;
     }
 }
 
 void case_close(Session *session) {
     int fhandle;
+    int ret;
     memcpy(&fhandle, session->buffer + 1 + sizeof(int), sizeof(int));
-    int tfs_ret_int = tfs_close(fhandle);
-    if (write(session->tx, &tfs_ret_int, sizeof(int)) == -1) {
+    ret = tfs_close(fhandle);
+    if (write(session->tx, &ret, sizeof(int)) == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
-        end_sessions();
-        exit(EXIT_FAILURE);
+        return;
     }
 }
 
@@ -213,7 +208,7 @@ void case_write(Session *session) {
     int fhandle;
     size_t len;
     char *buffer;
-    ssize_t tfs_ret_ssize_t;
+    ssize_t ret;
     memcpy(&fhandle, session->buffer + 1 + sizeof(int), sizeof(int));
     memcpy(&len, session->buffer + 1 + 2 * sizeof(int), sizeof(size_t));
     buffer = malloc(sizeof(char) * len);
@@ -223,12 +218,11 @@ void case_write(Session *session) {
         exit(EXIT_FAILURE);
     }
     memcpy(buffer, session->buffer + 1 + 2 * sizeof(int) + sizeof(size_t), sizeof(char) * len);
-    tfs_ret_ssize_t = tfs_write(fhandle, buffer, len);
-    if (write(session->tx, &tfs_ret_ssize_t, sizeof(ssize_t)) == -1) {
+    ret = tfs_write(fhandle, buffer, len);
+    if (write(session->tx, &ret, sizeof(ssize_t)) == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         free(buffer);
-        end_sessions();
-        exit(EXIT_FAILURE);
+        return;
     }
     free(buffer);
 }
@@ -237,7 +231,7 @@ void case_read(Session *session) {
     int fhandle;
     size_t len;
     char *buffer;
-    ssize_t tfs_ret_ssize_t;
+    ssize_t ret;
     memcpy(&fhandle, session->buffer + 1 + sizeof(int), sizeof(int));
     memcpy(&len, session->buffer + 1 + 2 * sizeof(int), sizeof(size_t));
     buffer = malloc(sizeof(char) * len);
@@ -246,30 +240,26 @@ void case_read(Session *session) {
         end_sessions();
         exit(EXIT_FAILURE);
     }
-    tfs_ret_ssize_t = tfs_read(fhandle, buffer, len);
-    if (write(session->tx, &tfs_ret_ssize_t, sizeof(ssize_t)) == -1) {
+    ret = tfs_read(fhandle, buffer, len);
+    if (write(session->tx, &ret, sizeof(ssize_t)) == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         free(buffer);
-        end_sessions();
-        exit(EXIT_FAILURE);
+        return;
     }
-    if (write(session->tx, buffer, (size_t) tfs_ret_ssize_t) == -1) {
+    if (write(session->tx, buffer, (size_t) ret) == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         free(buffer);
-        end_sessions();
-        exit(EXIT_FAILURE);
+        return;
     }
     free(buffer);
 }
 
 void case_shutdown(Session *session) {
-    int tfs_ret_int;
-    tfs_ret_int = tfs_destroy_after_all_closed();
+    int ret = tfs_destroy_after_all_closed();
     lock_mutex(&shutting_down_lock);
     shutting_down = true;
     unlock_mutex(&shutting_down_lock);
-    // TODO - TRY TO RETURN -1 TO THE CLIENT WHENEVER POSSIBLE
-    if (write(session->tx, &tfs_ret_int, sizeof(int)) == -1) {
+    if (write(session->tx, &ret, sizeof(int)) == -1) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         end_sessions();
         exit(EXIT_FAILURE);
@@ -310,8 +300,6 @@ void end_sessions() {
         pthread_cond_signal(&sessions[i].session_flag); // wake up the thread to kill it
         free(sessions[i].buffer);
     }
-    printf("[INFO]: TecnicoFS server shutting down successfully\n");
-    exit(EXIT_SUCCESS);
 }
 
 /*
@@ -392,12 +380,10 @@ void *thread_handler(void *arg) {
 
 /*
  * ----------------------------------------------------------------------------
- * Below is a helper function for the receving thread in main.
- * Checks if it was able to read correctly from the pipe.
- * If it finds out that the pipe was closed, it tries to open it again.
+ * Below is the helper function for the receiving thread in main.
  * ----------------------------------------------------------------------------
  */
-bool check_pipe_open(ssize_t ret) {
+bool check_pipe_open(ssize_t ret, int rx, char *pipename) {
     if (ret == -1) {
         fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
         return false;

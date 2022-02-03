@@ -79,6 +79,11 @@ void end_sessions();
  */
 void *thread_handler(void *arg);
 
-bool check_pipe_open(ssize_t ret);
+/*
+ * Helper function for reading from pipe in main.
+ * Checks if it was able to read correctly from the pipe.
+ * If it finds out that the pipe was closed, it tries to open it again.
+ */
+bool check_pipe_open(ssize_t ret, int rx, char *pipename);
 
 #endif
