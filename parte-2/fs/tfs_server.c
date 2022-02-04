@@ -324,11 +324,6 @@ void start_sessions() {
     for (int i = 0; i < MAX_CLIENTS; i++) {
         sessions[i].session_id = i + 1;
         sessions[i].is_active = false;
-        sessions[i].buffer = malloc(sizeof(char) * MAX_REQUEST_SIZE);
-        if (sessions[i].buffer == NULL) {
-            fprintf(stderr, "[ERR]: malloc failed: %s\n", strerror(errno));
-            exit(EXIT_FAILURE);
-        }
         init_mutex(&sessions[i].session_lock);
         if (pthread_cond_init(&sessions[i].session_flag, NULL) != 0) {
             fprintf(stderr, "[ERR]: cond init failed: %s\n", strerror(errno));

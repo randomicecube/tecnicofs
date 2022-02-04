@@ -16,7 +16,7 @@ typedef struct Session{
     pthread_mutex_t session_lock;
     pthread_cond_t session_flag;
     pthread_t session_t;
-    char *buffer;
+    char buffer[MAX_REQUEST_SIZE];
     int tx;
     char *pipename;
 } Session;
