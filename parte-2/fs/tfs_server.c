@@ -53,6 +53,7 @@ int main(int argc, char **argv) {
     start_sessions();
 
     ssize_t ret;
+		size_t len;
     int session_id;
     char op_code;
     char temp_buffer[MAX_REQUEST_SIZE];
@@ -124,7 +125,6 @@ int main(int argc, char **argv) {
                     } 
                     break;
                 case TFS_OP_CODE_WRITE:
-                    size_t len;
                     if (read(rx, current_session->buffer + 1 + sizeof(int), sizeof(int)) == -1) {
                         fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
                         write(current_session->tx, &failure_code, sizeof(int));
