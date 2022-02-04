@@ -104,6 +104,42 @@ void destroy_mutex(pthread_mutex_t *mutex) {
 }
 
 /*
+ * Reads (and guarantees that it reads correctly) a given number of bytes
+ * from a pipe to a given buffer
+ */
+int read_buffer(int rx, char *buf, size_t to_read) {
+    ssize_t ret;
+    size_t read_so_far = 0;
+    while (read_so_far < to_read) {
+        ret = read(rx, buf + read_so_far, to_read - read_so_far);
+        if (ret == -1) {
+            fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
+            return -1;
+        }
+        read_so_far += (size_t) ret;
+    }
+    return 0;
+}
+
+/*
+ * Writes (and guarantees that it writes correctly) a given number of bytes
+ * to a pipe from a given buffer
+ */
+int write_buffer(int tx, char *buf, size_t to_write) {
+    ssize_t ret;
+    size_t written_so_far = 0;
+    while (written_so_far < to_write) {
+        ret = write(tx, buf + written_so_far, to_write - written_so_far);
+        if (ret == -1) {
+            fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
+            return -1;
+        }
+        written_so_far += (size_t) ret;
+    }
+    return 0;
+}
+
+/*
  * Initializes FS state
  */
 void state_init() {

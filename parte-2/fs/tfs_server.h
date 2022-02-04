@@ -4,7 +4,6 @@
 #include "common/common.h"
 #include "state.h"
 #include "config.h"
-#include "state.h"
 #include <sys/types.h>
 #include <stdbool.h>
 

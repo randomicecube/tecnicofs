@@ -99,4 +99,6 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len);
  */
 int tfs_shutdown_after_all_closed();
 
+int write_buffer(int tx, char *buf, size_t to_write);
+
 #endif /* CLIENT_API_H */

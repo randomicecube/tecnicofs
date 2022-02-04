@@ -40,8 +40,7 @@ int tfs_mount(char const *client_pipe_path, char const *server_pipe_path) {
     memset(server_request + 1, '\0', sizeof(char) * BUFFER_SIZE);
     memcpy(server_request + 1, client_pipe_path, sizeof(char) * strlen(client_pipe_path));
 
-    if (write(client.tx, server_request, sizeof(server_request)) == -1 || errno == EPIPE) {
-        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
+    if (write_buffer(client.tx, server_request, MOUNT_SIZE_API) == -1 || errno == EPIPE) {
         return -1;
     }
     if (read(client.rx, &client.session_id, sizeof(int)) == -1 || errno == EPIPE) {
@@ -61,8 +60,7 @@ int tfs_unmount() {
     memcpy(server_request, &op_code, sizeof(char));
     memcpy(server_request + 1, &client.session_id, sizeof(int));
     
-    if (write(client.tx, server_request, sizeof(server_request)) == -1 || errno == EPIPE) {
-        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
+    if (write_buffer(client.tx, server_request, UNMOUNT_SIZE_API) == -1 || errno == EPIPE) {
         return -1;
     }
 
@@ -92,8 +90,7 @@ int tfs_open(char const *name, int flags) {
     memset(server_request + 1 + 2 * sizeof(int), '\0', sizeof(char) * BUFFER_SIZE);
     memcpy(server_request + 1 + 2 * sizeof(int), name, sizeof(char) * strlen(name));
     
-    if (write(client.tx, server_request, sizeof(server_request)) == -1 || errno == EPIPE) {
-        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
+    if (write_buffer(client.tx, server_request, OPEN_SIZE_API) == -1 || errno == EPIPE) {
         return -1;
     }
     if (read(client.rx, &ret, sizeof(int)) == -1 || errno == EPIPE) {
@@ -111,8 +108,7 @@ int tfs_close(int fhandle) {
     memcpy(server_request + 1, &client.session_id, sizeof(int));
     memcpy(server_request + 1 + sizeof(int), &fhandle, sizeof(int));
 
-    if (write(client.tx, server_request, sizeof(server_request)) == -1 || errno == EPIPE) {
-        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
+    if (write_buffer(client.tx, server_request, CLOSE_SIZE_API) == -1 || errno == EPIPE) {
         return -1;
     }
     if (read(client.rx, &ret, sizeof(int)) == -1 || errno == EPIPE) {
@@ -132,8 +128,7 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t len) {
     memcpy(server_request + 1 + 2 * sizeof(int), &len, sizeof(size_t));
     memcpy(server_request + 1 + 2 * sizeof(int) + sizeof(size_t), buffer, sizeof(char) * len);
 
-    if (write(client.tx, server_request, sizeof(server_request)) == -1 || errno == EPIPE) {
-        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
+    if (write_buffer(client.tx, server_request, WRITE_SIZE_API(len)) == -1 || errno == EPIPE) {
         return -1;
     }
     if (read(client.rx, &ret, sizeof(ssize_t)) == -1 || errno == EPIPE) {
@@ -152,16 +147,14 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
     memcpy(server_request + 1 + sizeof(int), &fhandle, sizeof(int));
     memcpy(server_request + 1 + 2 * sizeof(int), &len, sizeof(size_t));
 
-    if (write(client.tx, server_request, sizeof(server_request)) == -1 || errno == EPIPE) {
-        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
+    if (write_buffer(client.tx, server_request, READ_SIZE_API) == -1 || errno == EPIPE) {
         return -1;
     }
     if (read(client.rx, &ret, sizeof(ssize_t)) == -1 || errno == EPIPE) {
         fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
         return -1;
     }
-    if (read(client.rx, buffer, sizeof(char) * len) == -1 || errno == EPIPE) {
-        fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
+    if (read(client.rx, buffer, len) == -1 || errno == EPIPE) {
         return -1;
     }
     return ret;
@@ -174,7 +167,7 @@ int tfs_shutdown_after_all_closed() {
     memcpy(server_request, &op_code, sizeof(char));
     memcpy(server_request + 1, &client.session_id, sizeof(int));
 
-    if (write(client.tx, server_request, sizeof(server_request)) == -1 || errno == EPIPE) {
+    if (write_buffer(client.tx, server_request, SHUTDOWN_SIZE_API) == -1 || errno == EPIPE) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         return -1;
     }
@@ -191,4 +184,22 @@ int tfs_shutdown_after_all_closed() {
         return -1;
     }
     return shutdown_ret;
+}
+
+/*
+ * Writes (and guarantees that it writes correctly) a given number of bytes
+ * to a pipe from a given buffer
+ */
+int write_buffer(int tx, char *buf, size_t to_write) {
+    ssize_t ret;
+    size_t written_so_far = 0;
+    while (written_so_far < to_write) {
+        ret = write(tx, buf + written_so_far, to_write - written_so_far);
+        if (ret == -1) {
+            fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
+            return -1;
+        }
+        written_so_far += (size_t) ret;
+    }
+    return 0;
 }

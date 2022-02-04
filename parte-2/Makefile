@@ -20,6 +20,7 @@ TARGET_EXECS += tests/client_server_simple_test
 TARGET_EXECS += tests/client_server_simple_test_processes
 TARGET_EXECS += tests/client_server_shutdown_test
 TARGET_EXECS += tests/test_open_after_destroy
+TARGET_EXECS += tests/block_destroy_simple
 
 # VPATH is a variable used by Makefile which finds *sources* and makes them available throughout the codebase
 # vpath %.h <DIR> tells make to look for header files in <DIR>
@@ -78,6 +79,7 @@ tests/client_server_shutdown_test: tests/client_server_shutdown_test.o client/te
 fs/tfs_server: fs/operations.o fs/state.o
 tests/lib_destroy_after_all_closed_test: fs/operations.o fs/state.o
 tests/test_open_after_destroy: fs/operations.o fs/state.o
+tests/block_destroy_simple: fs/operations.o fs/state.o
 
 clean:
 	rm -f $(OBJECTS) $(TARGET_EXECS)

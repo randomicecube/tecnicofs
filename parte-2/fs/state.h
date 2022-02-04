@@ -5,6 +5,7 @@
 #include "../common/common.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <errno.h>
 #include <sys/types.h>
 
 /*
@@ -38,6 +39,15 @@ typedef struct {
 } open_file_entry_t;
 
 #define MAX_DIR_ENTRIES (BLOCK_SIZE / sizeof(dir_entry_t))
+
+/*
+ * The regular pipe read and write functions aren't guaranteed to read/write
+ * the number of bytes we want. Therefore, below are two functions which aim to
+ * guarantee that the number of bytes we want are read/written.
+ */
+
+int read_buffer(int rx, char *buf, size_t to_read);
+int write_buffer(int tx, char *buf, size_t to_write);
 
 void lock_mutex(pthread_mutex_t *mutex);
 void unlock_mutex(pthread_mutex_t *mutex);
