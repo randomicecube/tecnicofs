@@ -28,6 +28,7 @@ int main(int argc, char **argv) {
     }
 
     tfs_init();
+		signal(SIGPIPE, SIG_IGN);
 
     char *pipename = argv[1];
     printf("[INFO]: Starting TecnicoFS server with pipe called %s\n", pipename);
